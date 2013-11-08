@@ -169,7 +169,7 @@ class IkonboardToBBPress_Admin {
 			ini_set( 'output_buffering', 'off' );
 			ini_set( 'memory_limit', '3075M' );
 
-			$config = new MigrateConfig();
+			$config = new MigrateConfig( 'bp_' );
 
 			MigrateUsers::migrate( $config );
 			//MigrateTopics::migrate();
@@ -188,11 +188,10 @@ class IkonboardToBBPress_Admin {
 
 		return array_merge(
 			array(
-				'settings' => '<a href="' . admin_url( 'options-general.php?page=' . $this->plugin_slug ) . '">' . __( 'Settings', $this->plugin_slug ) . '</a>'
+				'settings' => '<a href="' . admin_url( 'tool.php?page=' . $this->plugin_slug ) . '">' . __( 'Settings', $this->plugin_slug ) . '</a>'
 			),
 			$links
 		);
-
 	}
 
 	/**

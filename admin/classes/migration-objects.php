@@ -5,9 +5,33 @@
  */
 class MigrateConfig {
 
-	public $member_profiles = 'bp_member_profiles';
-	public $forum_topics = 'bp_forum_topics';
-	public $forum_posts = 'bp_forum_posts';
+	public $member_profiles;
+	public $categories;
+	public $forum_info;
+	public $forum_topics;
+	public $forum_posts;
+
+	/**
+	 * @param string|null $prefix
+	 * @param array $table_names
+	 */
+	public function __construct ( $prefix = null, $table_names = array() ) {
+		$defaults = array(
+			'member_profiles' => 'member_profiles',
+			'categories' => 'categories',
+			'forum_info' => 'forum_info',
+			'forum_topics' => 'forum_topics',
+			'forum_posts' => 'forum_posts'
+		);
+		$table_names = array_merge( $defaults, $table_names );
+
+		foreach ( $table_names as $member_name => $name ) {
+			if ( !empty($prefix)) {
+				$name = $prefix . $name;
+			}
+			$this->$member_name = $name;
+		}
+	}
 }
 
 /**
@@ -49,7 +73,6 @@ class MigrateUsers {
 			";
 			$wpdb->query( $sql );
 		}
-
 	}
 }
 
