@@ -62,13 +62,13 @@ if ( is_admin() && ( !defined( 'DOING_AJAX' ) || !DOING_AJAX ) ) {
 
 }
 
-function time_elapsed () {
+function time_elapsed ( $message = 'Time elapsed' ) {
 	static $last = null;
 
 	$now = microtime( true );
 
 	if ( $last != null ) {
-		echo '<!-- Time elapsed: ' . ( $now - $last ) . ' -->';
+		echo "<!-- $message: " . ( $now - $last ) . ' -->';
 	}
 
 	$last = $now;

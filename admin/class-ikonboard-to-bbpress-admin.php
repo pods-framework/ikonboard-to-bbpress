@@ -162,18 +162,20 @@ class IkonboardToBBPress_Admin {
 		if ( 'import' == $_GET[ 'action' ] ) {
 			require_once 'classes/migration-objects.php';
 
-			time_elapsed();
+			time_elapsed(); // Start timer
 
 			// Things happen here
 			set_time_limit( 60000 );
 			ini_set( 'output_buffering', 'off' );
 			ini_set( 'memory_limit', '3075M' );
 
-			//MigrateUsers::migrate();
-			MigrateTopics::migrate();
+			$config = new MigrateConfig();
+
+			MigrateUsers::migrate( $config );
+			//MigrateTopics::migrate();
 			//MigrateReplies::migrate();
 
-			time_elapsed();
+			time_elapsed(); // Timer output
 		}
 	}
 

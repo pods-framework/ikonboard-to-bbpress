@@ -1,14 +1,28 @@
 <?php
+
+/**
+ * Class MigrateConfig
+ */
+class MigrateConfig {
+
+	public $member_profiles = 'bp_member_profiles';
+	public $forum_topics = 'bp_forum_topics';
+	public $forum_posts = 'bp_forum_posts';
+}
+
 /**
  * Class MigrateUsers
  */
 class MigrateUsers {
 
-	public static function migrate () {
+	/**
+	 * @param MigrateConfig $config
+	 */
+	public static function migrate ( $config ) {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
-		$members = $wpdb->get_results( "SELECT * FROM bp_member_profiles LIMIT 1000" );
+		$members = $wpdb->get_results( "SELECT * FROM {$config->member_profiles} LIMIT 1000" );
 		foreach ( $members as $this_member ) {
 
 			// wp_users insert
@@ -39,9 +53,33 @@ class MigrateUsers {
 	}
 }
 
+/**
+ * Class MigrateForums
+ */
+class MigrateForums {
+
+	/**
+	 * @param MigrateConfig $config
+	 */
+	public static function migrate ( $config ) {
+		/** @global wpdb $wpdb */
+		global $wpdb;
+
+		// Categories
+
+		// Forums
+	}
+}
+
+/**
+ * Class MigrateTopics
+ */
 class MigrateTopics {
 
-	public static function migrate () {
+	/**
+	 * @param MigrateConfig $config
+	 */
+	public static function migrate ( $config ) {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
@@ -49,14 +87,14 @@ class MigrateTopics {
 			SELECT
 				*
 			FROM
-				bp_forum_topics AS t
-				LEFT JOIN bp_forum_posts AS p
+				{$config->forum_topics} AS t
+				LEFT JOIN {$config->forum_posts} AS p
 					ON p.TOPIC_ID = t.TOPIC_ID
 					AND p.POST_DATE = (
 						SELECT
 							MIN(POST_DATE)
 						FROM
-							bp_forum_posts AS ptemp
+							{$config->forum_posts} AS ptemp
 						WHERE
 							ptemp.TOPIC_ID = t.TOPIC_ID
 					)
@@ -73,9 +111,15 @@ class MigrateTopics {
 	}
 }
 
+/**
+ * Class MigrateReplies
+ */
 class MigrateReplies {
 
-	public static function migrate () {
+	/**
+	 * @param MigrateConfig $config
+	 */
+	public static function migrate ( $config ) {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
@@ -83,14 +127,14 @@ class MigrateReplies {
 			SELECT
 				*
 			FROM
-				bp_forum_topics AS t
-				LEFT JOIN bp_forum_posts AS p
+				{$config->forum_topics} AS t
+				LEFT JOIN {$config->forum_posts} AS p
 					ON p.TOPIC_ID = t.TOPIC_ID
 					AND p.POST_DATE != (
 						SELECT
 							MIN(POST_DATE)
 						FROM
-							bp_forum_posts AS ptemp
+							{$config->forum_posts} AS ptemp
 						WHERE
 							ptemp.TOPIC_ID = t.TOPIC_ID
 					)
