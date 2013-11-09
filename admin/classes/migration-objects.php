@@ -91,27 +91,44 @@ class MigrateUsers {
 		$members = $wpdb->get_results( "
 			SELECT *
 			FROM {$config->member_profiles}
-			LIMIT 1000"
-		);
+		" );
+
+		$values = '';
 		foreach ( $members as $this_member ) {
 
 			// wp_users insert
 			$name = addslashes( $this_member->MEMBER_NAME );
 			$email = addslashes( $this_member->MEMBER_EMAIL );
-			$wpdb->query( "
-				INSERT INTO {$wpdb->users}
-					(user_login, user_nicename, display_name, user_email)
-				VALUES
-					('$name', '$name', '$name', '$email');
-			" );
-
-			// Get the new user ID
-			$user_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
-
-			// wp_usermeta insert
-			$member_id = addslashes( $this_member->MEMBER_ID );
-			$wpdb->query( "INSERT INTO {$wpdb->usermeta} (user_id, meta_key, meta_value) VALUES ($user_id, 'IKON_MEMBER_ID', '$member_id')" );
+			$values .= "('$name', '$name', '$name', '$email'),";
 		}
+		$values = trim( $values, ',' );
+		$wpdb->query( "
+			INSERT INTO {$wpdb->users}
+				(user_login, user_nicename, display_name, user_email)
+			VALUES
+				$values;
+		" );
+
+		// Statement order is significant here: ROW_COUNT() applies ONLY to the last sql statement, even a SELECT
+		// LAST_INSERT_ID() applies to the most recently executed INSERT (returns the FIRST auto-generated ID if bulk)
+		$added_rows = $wpdb->get_var( 'SELECT ROW_COUNT();' );
+		$first_new_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
+
+		// Do it again for meta
+		$values = '';
+		$user_id = $first_new_id;
+		foreach ( $members as $this_member ) {
+			$member_id = addslashes( $this_member->MEMBER_ID );
+			$values .= "($user_id, 'IKON_MEMBER_ID', '$member_id'),";
+			++$user_id;
+		}
+		$values = trim( $values, ',' );
+		$wpdb->query( "
+			INSERT INTO {$wpdb->usermeta}
+				(user_id, meta_key, meta_value)
+			VALUES
+				$values
+		" );
 	}
 }
 
