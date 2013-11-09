@@ -39,6 +39,45 @@ class MigrateConfig {
 }
 
 /**
+ * Class MigratePostCreator
+ */
+abstract class MigratePostCreator {
+
+	/**
+	 * @param array $post_data
+	 *
+	 * @return null|string New post ID
+	 */
+	public static function create_post ( $post_data ) {
+		/** @global wpdb $wpdb */
+		global $wpdb;
+
+		$user_id = get_current_user_id();
+		$date = date( 'Y-m-d H:i:s' );
+
+		$defaults = array(
+			'post_author'       => $user_id,
+			'post_date'         => "'$date'",
+			'post_date_gmt'     => "'$date'",
+			'post_status'       => "'publish'",
+			'comment_status'    => "'closed'",
+			'ping_status'       => "'closed'",
+			'post_modified'     => "'$date'",
+			'post_modified_gmt' => "'$date'",
+			'post_parent'       => 0,
+			'post_type'         => "'forum'"
+		);
+
+		$post_data = array_merge( $defaults, $post_data );
+		$keys = implode( ', ', array_keys( $post_data ) );
+		$values = implode( ', ', $post_data );
+
+		$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES ($values)" );
+		return $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
+	}
+}
+
+/**
  * Class MigrateUsers
  */
 class MigrateUsers {
@@ -80,7 +119,7 @@ class MigrateUsers {
  * wp_insert_post: 50.98 seconds
  *
  */
-class MigrateForums {
+class MigrateForums extends MigratePostCreator {
 
 	/**
 	 * @param MigrateConfig $config
@@ -101,28 +140,11 @@ class MigrateForums {
 			$category_id = stripslashes( $this_cat->CAT_ID );
 
 			$post_data = array(
-				'post_author'       => $user_id,
-				'post_date'         => "'$date'",
-				'post_date_gmt'     => "'$date'",
-				'post_content'      => "''",
-				'post_title'        => "'$post_title'",
-				'post_status'       => "'publish'",
-				'comment_status'    => "'closed'",
-				'ping_status'       => "'closed'",
-				'post_name'         => "'$post_name'",
-				'post_modified'     => "'$date'",
-				'post_modified_gmt' => "'$date'",
-				'post_parent'       => 0,
-				'menu_order'        => $menu_order,
-				'post_type'         => "'forum'"
+				'post_title' => "'$post_title'",
+				'post_name'  => "'$post_name'",
+				'menu_order' => $menu_order,
 			);
-			$keys = implode( ', ', array_keys( $post_data ) );
-			$values = implode( ', ', $post_data );
-
-			$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES ($values)" );
-
-			// Get the new post id
-			$post_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
+			$post_id = self::create_post( $post_data );
 
 			// Insert meta for the category
 			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_CAT_ID', '$category_id')" );
@@ -134,32 +156,17 @@ class MigrateForums {
 			$post_title = stripslashes( $this_forum->FORUM_NAME );
 			$post_name = sanitize_title( $post_title );
 			$post_content = stripslashes( $this_forum->FORUM_DESC );
-			$menu_order = (int)stripslashes( $this_forum->FORUM_POSITION );
+			$menu_order = (int) stripslashes( $this_forum->FORUM_POSITION );
 			$post_parent = (int) $wpdb->get_var( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key='IKON_CAT_ID' AND meta_value = '{$this_forum->CATEGORY}'" );
 
 			$post_data = array(
-				'post_author'       => $user_id,
-				'post_date'         => "'$date'",
-				'post_date_gmt'     => "'$date'",
-				'post_content'      => "'$post_content'",
-				'post_title'        => "'$post_title'",
-				'post_status'       => "'publish'",
-				'comment_status'    => "'closed'",
-				'ping_status'       => "'closed'",
-				'post_name'         => "'$post_name'",
-				'post_modified'     => "'$date'",
-				'post_modified_gmt' => "'$date'",
-				'post_parent'       => $post_parent,
-				'menu_order'        => $menu_order,
-				'post_type'         => "'forum'"
+				'post_content' => "'$post_content'",
+				'post_title'   => "'$post_title'",
+				'post_name'    => "'$post_name'",
+				'post_parent'  => $post_parent,
+				'menu_order'   => $menu_order,
 			);
-			$keys = implode( ', ', array_keys( $post_data ) );
-			$values = implode( ', ', $post_data );
-
-			$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES ($values)" );
-
-			// Get the new post id
-			$post_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
+			$post_id = self::create_post( $post_data );
 		}
 
 		// Set all the guids (faster to set all the guids at once than one at a time in the "big loop")
@@ -174,7 +181,7 @@ class MigrateForums {
 /**
  * Class MigrateTopics
  */
-class MigrateTopics {
+class MigrateTopics extends MigratePostCreator {
 
 	/**
 	 * @param MigrateConfig $config
@@ -207,7 +214,7 @@ class MigrateTopics {
 /**
  * Class MigrateReplies
  */
-class MigrateReplies {
+class MigrateReplies extends MigratePostCreator {
 
 	/**
 	 * @param MigrateConfig $config
