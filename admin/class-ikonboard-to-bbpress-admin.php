@@ -169,11 +169,13 @@ class IkonboardToBBPress_Admin {
 			ini_set( 'output_buffering', 'off' );
 			ini_set( 'memory_limit', '3075M' );
 
+			// Setup config for our environment (table names and prefix)
 			$config = new MigrateConfig( 'bp_' );
 
-			MigrateUsers::migrate( $config );
-			//MigrateTopics::migrate();
-			//MigrateReplies::migrate();
+			//MigrateUsers::migrate( $config );
+			MigrateForums::migrate( $config );
+			//MigrateTopics::migrate( $config );
+			//MigrateReplies::migrate( $config );
 
 			time_elapsed(); // Timer output
 		}
@@ -188,7 +190,7 @@ class IkonboardToBBPress_Admin {
 
 		return array_merge(
 			array(
-				'settings' => '<a href="' . admin_url( 'tool.php?page=' . $this->plugin_slug ) . '">' . __( 'Settings', $this->plugin_slug ) . '</a>'
+				'settings' => '<a href="' . admin_url( 'tools.php?page=' . $this->plugin_slug ) . '">' . __( 'Settings', $this->plugin_slug ) . '</a>'
 			),
 			$links
 		);
