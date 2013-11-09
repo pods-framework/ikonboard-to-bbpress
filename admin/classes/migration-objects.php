@@ -65,7 +65,6 @@ abstract class MigratePostCreator {
 			'post_modified'     => "'$date'",
 			'post_modified_gmt' => "'$date'",
 			'post_parent'       => 0,
-			'post_type'         => "'forum'"
 		);
 
 		$post_data = array_merge( $defaults, $post_data );
@@ -143,6 +142,7 @@ class MigrateForums extends MigratePostCreator {
 				'post_title' => "'$post_title'",
 				'post_name'  => "'$post_name'",
 				'menu_order' => $menu_order,
+				'post_type'  => "'forum'"
 			);
 			$post_id = self::create_post( $post_data );
 
@@ -165,6 +165,7 @@ class MigrateForums extends MigratePostCreator {
 				'post_name'    => "'$post_name'",
 				'post_parent'  => $post_parent,
 				'menu_order'   => $menu_order,
+				'post_type'    => "'forum'"
 			);
 			$post_id = self::create_post( $post_data );
 		}
