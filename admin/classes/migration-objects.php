@@ -88,7 +88,11 @@ class MigrateUsers {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
-		$members = $wpdb->get_results( "SELECT * FROM {$config->member_profiles} LIMIT 1000" );
+		$members = $wpdb->get_results( "
+			SELECT *
+			FROM {$config->member_profiles}
+			LIMIT 1000"
+		);
 		foreach ( $members as $this_member ) {
 
 			// wp_users insert
@@ -113,10 +117,6 @@ class MigrateUsers {
 
 /**
  * Class MigrateForums
- *
- * Straight insert: 23.58 seconds
- * wp_insert_post: 50.98 seconds
- *
  */
 class MigrateForums extends MigratePostCreator {
 
@@ -127,16 +127,12 @@ class MigrateForums extends MigratePostCreator {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
-		$user_id = get_current_user_id();
-		$date = date( 'Y-m-d H:i:s' );
-
 		// Ikonboard categories become top-level forums (no parent)
 		$categories = $wpdb->get_results( "SELECT * FROM {$config->categories}" );
 		foreach ( $categories as $this_cat ) {
-			$post_title = stripslashes( $this_cat->CAT_NAME );
+			$post_title = addslashes( $this_cat->CAT_NAME );
 			$post_name = sanitize_title( $post_title );
-			$menu_order = stripslashes( $this_cat->CAT_POS );
-			$category_id = stripslashes( $this_cat->CAT_ID );
+			$menu_order = addslashes( $this_cat->CAT_POS );
 
 			$post_data = array(
 				'post_title' => "'$post_title'",
@@ -146,17 +142,20 @@ class MigrateForums extends MigratePostCreator {
 			);
 			$post_id = self::create_post( $post_data );
 
-			// Insert meta for the category
-			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_CAT_ID', '$category_id')" );
+			// Save Ikonboard category ID as meta
+			$ikon_cat_id = addslashes( $this_cat->CAT_ID );
+			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_CAT_ID', '$ikon_cat_id')" );
 		}
 
 		// Ikonboard Forums
 		$forums = $wpdb->get_results( "SELECT * FROM {$config->forum_info}" );
 		foreach ( $forums as $this_forum ) {
-			$post_title = stripslashes( $this_forum->FORUM_NAME );
+			$post_title = addslashes( $this_forum->FORUM_NAME );
 			$post_name = sanitize_title( $post_title );
-			$post_content = stripslashes( $this_forum->FORUM_DESC );
-			$menu_order = (int) stripslashes( $this_forum->FORUM_POSITION );
+			$post_content = addslashes( $this_forum->FORUM_DESC );
+			$menu_order = (int) addslashes( $this_forum->FORUM_POSITION );
+
+			// Lookup the forum parent via the Ikonboard category id we stash in meta
 			$post_parent = (int) $wpdb->get_var( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key='IKON_CAT_ID' AND meta_value = '{$this_forum->CATEGORY}'" );
 
 			$post_data = array(
@@ -168,14 +167,16 @@ class MigrateForums extends MigratePostCreator {
 				'post_type'    => "'forum'"
 			);
 			$post_id = self::create_post( $post_data );
+
+			// Ikonboard forum meta
+			$ikon_forum_id = addslashes( $this_forum->FORUM_ID );
+			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_FORUM_ID', '$ikon_forum_id')" );
 		}
 
 		// Set all the guids (faster to set all the guids at once than one at a time in the "big loop")
 		$site_url = get_site_url();
 		$params = '/?post_type=forum&#038;p=';
 		$wpdb->query( "UPDATE {$wpdb->posts} SET guid = CONCAT('$site_url', '$params', ID) WHERE guid = '' AND post_type = 'forum'" );
-
-		// ToDo: forum meta
 	}
 }
 
@@ -199,16 +200,33 @@ class MigrateTopics extends MigratePostCreator {
 				LEFT JOIN {$config->forum_posts} AS p
 					ON p.TOPIC_ID = t.TOPIC_ID
 					AND p.POST_DATE = ( SELECT MIN(POST_DATE) FROM {$config->forum_posts} AS ptemp WHERE ptemp.TOPIC_ID = t.TOPIC_ID )
+			LIMIT 50
 		" );
-		/*
-		foreach($topics as $this_topic) {
-			echo $this_topic->TOPIC_TITLE . ' ' . $this_topic->POST . '<hr />';
+		foreach ( $topics as $this_topic ) {
+			$post_title = addslashes( $this_topic->TOPIC_TITLE );
+			$post_name = sanitize_title( $post_title );
+			$post_content = addslashes( $this_topic->POST );
+			$post_author = (int) $wpdb->get_var( "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key='IKON_MEMBER_ID' AND meta_value = '{$this_topic->AUTHOR}'" );
 
 			// insert topic post
+			$post_data = array(
+				'post_author'  => $post_author,
+				'post_content' => "'$post_content'",
+				'post_title'   => "'$post_title'",
+				'post_name'    => "'$post_name'",
+				'post_type'    => "'topic'"
+			);
+			$post_id = self::create_post( $post_data );
 
-			// insert topic meta
+			// topic meta
+			$ikon_topic_id = addslashes( $this_topic->TOPIC_ID );
+			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_TOPIC_ID', '$ikon_topic_id')" );
 		}
-		*/
+
+		// Set all the guids (faster to set all the guids at once than one at a time in the "big loop")
+		$site_url = get_site_url();
+		$params = '/?post_type=topic&#038;p=';
+		$wpdb->query( "UPDATE {$wpdb->posts} SET guid = CONCAT('$site_url', '$params', ID) WHERE guid = '' AND post_type = 'topic'" );
 	}
 }
 
@@ -234,14 +252,11 @@ class MigrateReplies extends MigratePostCreator {
 					AND p.POST_DATE != ( SELECT MIN(POST_DATE) FROM $config->forum_posts} AS ptemp WHERE ptemp.TOPIC_ID = t.TOPIC_ID )
 		" );
 
-		/*
-		foreach($replies as $this_reply) {
+		foreach ( $replies as $this_reply ) {
 
-			// insert reply post
+			// ToDo: insert reply post
 
-			// insert reply meta
+			// ToDo: insert reply meta
 		}
-		*/
-
 	}
 }

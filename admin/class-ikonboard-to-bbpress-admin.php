@@ -175,8 +175,8 @@ class IkonboardToBBPress_Admin {
 			//MigrateUsers::migrate( $config );
 			//time_elapsed('Migrate users');
 
-			MigrateForums::migrate( $config );
-			time_elapsed('Migrate forums');
+			//MigrateForums::migrate( $config );
+			//time_elapsed('Migrate forums');
 
 			//MigrateTopics::migrate( $config );
 			//time_elapsed('Migrate topics');
