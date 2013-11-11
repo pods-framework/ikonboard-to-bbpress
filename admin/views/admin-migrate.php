@@ -8,16 +8,16 @@ time_elapsed(); // Start timer
 		// Setup config for our environment (table names and prefix)
 		$config = new MigrateConfig( 'bp_' );
 
-		//MigrateUsers::migrate( $config );
-		//time_elapsed('Migrate users');
+		MigrateUsers::migrate( $config );
+		time_elapsed('Migrate users');
 
-		//MigrateForums::migrate( $config );
-		//time_elapsed('Migrate forums');
+		MigrateForums::migrate( $config );
+		time_elapsed('Migrate forums');
 
-		//MigrateTopics::migrate( $config );
-		//time_elapsed('Migrate topics');
+		MigrateTopics::migrate( $config );
+		time_elapsed('Migrate topics');
 
-		//MigrateReplies::migrate( $config );
-		//time_elapsed('Migrate replies');
+		MigrateReplies::migrate( $config );
+		time_elapsed('Migrate replies');
 	?>
 </div>
