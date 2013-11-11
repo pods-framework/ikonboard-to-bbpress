@@ -145,7 +145,14 @@ class IkonboardToBBPress_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_plugin_admin_page () {
-		include_once( 'views/admin.php' );
+
+		if ( isset( $_GET[ 'action' ] ) && 'migrate' == $_GET[ 'action' ] ) {
+			require_once 'classes/migration-objects.php';
+			include_once 'views/admin-migrate.php';
+		}
+		else {
+			include_once 'views/admin.php';
+		}
 	}
 
 	/**
@@ -159,30 +166,14 @@ class IkonboardToBBPress_Admin {
 		}
 
 		// The import
-		if ( 'import' == $_GET[ 'action' ] ) {
-			require_once 'classes/migration-objects.php';
-
-			time_elapsed(); // Start timer
-
-			// Things happen here
-			set_time_limit( 60000 );
-			ini_set( 'output_buffering', 'off' );
+		if ( 'migrate' == $_GET[ 'action' ] ) {
 			ini_set( 'memory_limit', '3075M' );
+			set_time_limit( 0 );
 
-			// Setup config for our environment (table names and prefix)
-			$config = new MigrateConfig( 'bp_' );
-
-			//MigrateUsers::migrate( $config );
-			//time_elapsed('Migrate users');
-
-			//MigrateForums::migrate( $config );
-			//time_elapsed('Migrate forums');
-
-			//MigrateTopics::migrate( $config );
-			//time_elapsed('Migrate topics');
-
-			//MigrateReplies::migrate( $config );
-			//time_elapsed('Migrate replies');
+			// These allow for unbuffered, real-time echos to the browser
+			ob_implicit_flush( true );
+			ini_set( 'zlib.output_compression', 0 );
+			header( 'Content-Encoding: none;' );
 		}
 	}
 

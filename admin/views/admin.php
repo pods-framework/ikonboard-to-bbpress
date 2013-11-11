@@ -21,6 +21,6 @@
 
 	<h3><?php _e( 'Do it', 'bp-bbpress-migration' ); ?></h3>
 
-	<a href="<?php echo add_query_arg( array( 'action' => 'import' ) ); ?>" class="button button-primary" style="padding: 0 20px; text-align: center;"><?php _e( 'Import', 'bp-bbpress-migration' ); ?></a>
+	<a href="<?php echo add_query_arg( array( 'action' => 'migrate' ) ); ?>" class="button button-primary" style="padding: 0 20px; text-align: center;"><?php _e( 'Migrate', 'bp-bbpress-migration' ); ?></a>
 
 </div>

@@ -39,44 +39,6 @@ class MigrateConfig {
 }
 
 /**
- * Class MigratePostCreator
- */
-abstract class MigratePostCreator {
-
-	/**
-	 * @param array $post_data
-	 *
-	 * @return null|string New post ID
-	 */
-	public static function create_post ( $post_data ) {
-		/** @global wpdb $wpdb */
-		global $wpdb;
-
-		$user_id = get_current_user_id();
-		$date = date( 'Y-m-d H:i:s' );
-
-		$defaults = array(
-			'post_author'       => $user_id,
-			'post_date'         => "'$date'",
-			'post_date_gmt'     => "'$date'",
-			'post_status'       => "'publish'",
-			'comment_status'    => "'closed'",
-			'ping_status'       => "'closed'",
-			'post_modified'     => "'$date'",
-			'post_modified_gmt' => "'$date'",
-			'post_parent'       => 0,
-		);
-
-		$post_data = array_merge( $defaults, $post_data );
-		$keys = implode( ', ', array_keys( $post_data ) );
-		$values = implode( ', ', $post_data );
-
-		$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES ($values)" );
-		return $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
-	}
-}
-
-/**
  * Class MigrateUsers
  */
 class MigrateUsers {
@@ -88,54 +50,65 @@ class MigrateUsers {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
+		debug_out( 'Querying all members...' );
+		// Get all member records from Ikonboard
 		$members = $wpdb->get_results( "
 			SELECT *
 			FROM {$config->member_profiles}
 		" );
+		$records_selected = count( $members );
+		debug_out( "Query returned $records_selected rows" );
 
+		// Build a series of values strings for the insert
 		$values = '';
 		foreach ( $members as $this_member ) {
-
-			// wp_users insert
 			$name = addslashes( $this_member->MEMBER_NAME );
 			$email = addslashes( $this_member->MEMBER_EMAIL );
-			$values .= "('$name', '$name', '$name', '$email'),";
+
+			// Just doing it this way because it's easier to maintain the key/value list.
+			// The keys are only used once, after the last iteration of the loop
+			$user_data = array(
+				'user_login'    => "'$name'",
+				'user_nicename' => "'$name'",
+				'display_name'  => "'$name'",
+				'user_email'    => "'$email'"
+			);
+			$values .= '(' . implode( ', ', $user_data ) . '),';
 		}
+
+		// Pull off the last trailing comma and run the full insert
 		$values = trim( $values, ',' );
-		$wpdb->query( "
-			INSERT INTO {$wpdb->users}
-				(user_login, user_nicename, display_name, user_email)
-			VALUES
-				$values;
-		" );
+		$keys = implode( ', ', array_keys( $user_data ) );
+		$wpdb->query( "INSERT INTO {$wpdb->users} ($keys) VALUES $values" );
 
 		// Statement order is significant here: ROW_COUNT() applies ONLY to the last sql statement, even a SELECT
 		// LAST_INSERT_ID() applies to the most recently executed INSERT (returns the FIRST auto-generated ID if bulk)
 		$added_rows = $wpdb->get_var( 'SELECT ROW_COUNT();' );
 		$first_new_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
 
+		echo "\n<!-- Members: $records_selected : $added_rows -->\n";
+		if ( $added_rows != $records_selected ) {
+			// ToDo: decide what to do here if the insert didn't add all rows.  We can't do the loop to add
+			// meta correctly if we didn't insert all records.
+		}
+
 		// Do it again for meta
 		$values = '';
 		$user_id = $first_new_id;
 		foreach ( $members as $this_member ) {
 			$member_id = addslashes( $this_member->MEMBER_ID );
-			$values .= "($user_id, 'IKON_MEMBER_ID', '$member_id'),";
-			++$user_id;
+			$values .= "($user_id, 'IKON_MEMBER_ID_$member_id', '$member_id'),";
+			$user_id++;
 		}
 		$values = trim( $values, ',' );
-		$wpdb->query( "
-			INSERT INTO {$wpdb->usermeta}
-				(user_id, meta_key, meta_value)
-			VALUES
-				$values
-		" );
+		$wpdb->query( "INSERT INTO {$wpdb->usermeta} (user_id, meta_key, meta_value) VALUES $values" );
 	}
 }
 
 /**
  * Class MigrateForums
  */
-class MigrateForums extends MigratePostCreator {
+class MigrateForums {
 
 	/**
 	 * @param MigrateConfig $config
@@ -161,7 +134,7 @@ class MigrateForums extends MigratePostCreator {
 
 			// Save Ikonboard category ID as meta
 			$ikon_cat_id = addslashes( $this_cat->CAT_ID );
-			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_CAT_ID', '$ikon_cat_id')" );
+			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_CAT_ID_$ikon_cat_id', '$ikon_cat_id')" );
 		}
 
 		// Ikonboard Forums
@@ -173,7 +146,7 @@ class MigrateForums extends MigratePostCreator {
 			$menu_order = (int) addslashes( $this_forum->FORUM_POSITION );
 
 			// Lookup the forum parent via the Ikonboard category id we stash in meta
-			$post_parent = (int) $wpdb->get_var( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key='IKON_CAT_ID' AND meta_value = '{$this_forum->CATEGORY}'" );
+			$post_parent = (int) $wpdb->get_var( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key='IKON_CAT_ID_{$this_forum->CATEGORY}'" );
 
 			$post_data = array(
 				'post_content' => "'$post_content'",
@@ -186,8 +159,8 @@ class MigrateForums extends MigratePostCreator {
 			$post_id = self::create_post( $post_data );
 
 			// Ikonboard forum meta
-			$ikon_forum_id = addslashes( $this_forum->FORUM_ID );
-			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_FORUM_ID', '$ikon_forum_id')" );
+			$ikon_forum_id = (string) addslashes( $this_forum->FORUM_ID );
+			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_FORUM_ID_$ikon_forum_id', '$ikon_forum_id')" );
 		}
 
 		// Set all the guids (faster to set all the guids at once than one at a time in the "big loop")
@@ -195,12 +168,49 @@ class MigrateForums extends MigratePostCreator {
 		$params = '/?post_type=forum&#038;p=';
 		$wpdb->query( "UPDATE {$wpdb->posts} SET guid = CONCAT('$site_url', '$params', ID) WHERE guid = '' AND post_type = 'forum'" );
 	}
+
+	/**
+	 * @param array $post_data
+	 *
+	 * @return null|string New post ID
+	 */
+	private static function create_post ( $post_data ) {
+		/** @global wpdb $wpdb */
+		global $wpdb;
+
+		$user_id = get_current_user_id();
+		$date = date( 'Y-m-d H:i:s' );
+
+		$defaults = array(
+			'post_author'       => $user_id,
+			'post_date'         => "'$date'",
+			'post_date_gmt'     => "'$date'",
+			'post_status'       => "'publish'",
+			'comment_status'    => "'closed'",
+			'ping_status'       => "'closed'",
+			'post_modified'     => "'$date'",
+			'post_modified_gmt' => "'$date'",
+			'post_parent'       => 0,
+		);
+
+		$post_data = array_merge( $defaults, $post_data );
+		$keys = implode( ', ', array_keys( $post_data ) );
+		$values = implode( ', ', $post_data );
+
+		$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES ($values)" );
+		return $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
+	}
+
 }
 
 /**
  * Class MigrateTopics
  */
-class MigrateTopics extends MigratePostCreator {
+class MigrateTopics {
+
+	const ROWS_TO_BUFFER = 30000;
+
+	private static $first_new_id = null;
 
 	/**
 	 * @param MigrateConfig $config
@@ -209,6 +219,11 @@ class MigrateTopics extends MigratePostCreator {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
+		$date = date( 'Y-m-d H:i:s' );
+
+		debug_out( "Querying all topics..." );
+
+		// Topics are separate in Ikonboard.  Join the topic with the oldest post in the topic to get the bbPress topic
 		$topics = $wpdb->get_results( "
 			SELECT
 				*
@@ -217,40 +232,137 @@ class MigrateTopics extends MigratePostCreator {
 				LEFT JOIN {$config->forum_posts} AS p
 					ON p.TOPIC_ID = t.TOPIC_ID
 					AND p.POST_DATE = ( SELECT MIN(POST_DATE) FROM {$config->forum_posts} AS ptemp WHERE ptemp.TOPIC_ID = t.TOPIC_ID )
-			LIMIT 50
+				LEFT JOIN bp_member_profiles AS m
+					ON p.AUTHOR = m.MEMBER_id
 		" );
+		$records_selected = count( $topics );
+
+		debug_out( "Query returned $records_selected rows.<br />" );
+		debug_out( "Processing topic posts..." );
+
+		$keys = '';
+		$values = '';
+		$row = 0;
 		foreach ( $topics as $this_topic ) {
-			$post_title = addslashes( $this_topic->TOPIC_TITLE );
-			$post_name = sanitize_title( $post_title );
-			$post_content = addslashes( $this_topic->POST );
-			$post_author = (int) $wpdb->get_var( "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key='IKON_MEMBER_ID' AND meta_value = '{$this_topic->AUTHOR}'" );
+			$post_title = (string) addslashes( $this_topic->TOPIC_TITLE );
+			$post_name = (string) sanitize_title( $post_title ); // ToDo: must be unique
+			$post_content = (string) addslashes( $this_topic->POST );
+			$post_author = (int) $wpdb->get_var( "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key='IKON_MEMBER_ID_{$this_topic->AUTHOR}'" );
+			$post_parent = (int) $wpdb->get_var( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key='IKON_FORUM_ID_{$this_topic->FORUM_ID}'" );
 
-			// insert topic post
+			// Just doing it this way because it's easier to maintain the key/value list. The keys are only copied once.
 			$post_data = array(
-				'post_author'  => $post_author,
-				'post_content' => "'$post_content'",
-				'post_title'   => "'$post_title'",
-				'post_name'    => "'$post_name'",
-				'post_type'    => "'topic'"
+				'post_author'       => $post_author,
+				'post_date'         => "'$date'",
+				'post_date_gmt'     => "'$date'",
+				'post_content'      => "'$post_content'",
+				'post_title'        => "'$post_title'",
+				'post_name'         => "'$post_name'",
+				'post_status'       => "'publish'",
+				'comment_status'    => "'closed'",
+				'ping_status'       => "'closed'",
+				'post_modified'     => "'$date'",
+				'post_modified_gmt' => "'$date'",
+				'post_parent'       => $post_parent,
+				'post_type'         => "'topic'"
 			);
-			$post_id = self::create_post( $post_data );
+			if ( '' == $keys ) {
+				$keys = implode( ', ', array_keys( $post_data ) );
+			}
+			$values .= '(' . implode( ', ', $post_data ) . '),';
+			$row++;
 
-			// topic meta
-			$ikon_topic_id = addslashes( $this_topic->TOPIC_ID );
-			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_TOPIC_ID', '$ikon_topic_id')" );
+			if ( 0 == $row % 1000 ) {
+				debug_out( "Buffering topic post $row" );
+			}
+
+			if ( 0 == $row % self::ROWS_TO_BUFFER ) {
+				// Write everything out to this point and clear the values string buffer
+				self::insert_posts( $keys, $values );
+				$values = '';
+			}
 		}
+		// Insert the remainder in the buffer
+		self::insert_posts( $keys, $values );
 
-		// Set all the guids (faster to set all the guids at once than one at a time in the "big loop")
+		debug_out( 'Processing topic meta...' );
+
+		// topic meta
+		$values = '';
+		$post_id = self::$first_new_id;
+		$row = 0;
+		debug_out( "First new topic ID = $post_id" );
+		foreach ( $topics as $this_topic ) {
+			$ikon_topic_id = (string) addslashes( $this_topic->TOPIC_ID );
+			$author_ip = (string) addslashes( $this_topic->IP_ADDR );
+			$bbp_forum_id = $wpdb->get_var( "SELECT post_parent FROM $wpdb->posts WHERE ID = $post_id" );
+
+			$values .= "($post_id, 'IKON_TOPIC_ID_$ikon_topic_id', '$ikon_topic_id'),";
+			$values .= "($post_id, '_bbp_forum_id', '$bbp_forum_id'),";
+			$values .= "($post_id, '_bbp_topic_id', '$post_id'),";
+			$values .= "($post_id, '_bbp_author_ip', '$author_ip'),";
+			$row++;
+
+			if ( 0 == $row % 1000 ) {
+				debug_out( "Buffering topic meta $row" );
+			}
+
+			if ( 0 == $row % self::ROWS_TO_BUFFER ) {
+				// Write everything out to this point and clear the values string buffer
+				self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
+				$values = '';
+			}
+
+			$post_id++;
+		}
+		// Insert the remainder in the buffer
+		self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
+
+		// Set all the guids for the new posts
+		debug_out('Updating all topic guids...');
 		$site_url = get_site_url();
 		$params = '/?post_type=topic&#038;p=';
 		$wpdb->query( "UPDATE {$wpdb->posts} SET guid = CONCAT('$site_url', '$params', ID) WHERE guid = '' AND post_type = 'topic'" );
+		debug_out('Guids updated.');
+	}
+
+	/**
+	 * @param string $keys
+	 * @param string $values
+	 */
+	private static function insert_posts ( $keys, $values ) {
+		/** @global wpdb $wpdb */
+		global $wpdb;
+
+		debug_out( 'Inserting into wp_posts' );
+		$values = rtrim( $values, ',' );
+		$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES $values" );
+		debug_out( 'Insert done' );
+
+		if ( null === self::$first_new_id ) {
+			self::$first_new_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
+		}
+	}
+
+	/**
+	 * @param string $keys
+	 * @param string $values
+	 */
+	private static function insert_postmeta ( $keys, $values ) {
+		/** @global wpdb $wpdb */
+		global $wpdb;
+
+		$values = rtrim( $values, ',' );
+		debug_out( 'Inserting into wp_postmeta' );
+		$wpdb->query( "INSERT INTO {$wpdb->postmeta} ($keys) VALUES $values" );
+		debug_out( 'Insert done' );
 	}
 }
 
 /**
  * Class MigrateReplies
  */
-class MigrateReplies extends MigratePostCreator {
+class MigrateReplies {
 
 	/**
 	 * @param MigrateConfig $config

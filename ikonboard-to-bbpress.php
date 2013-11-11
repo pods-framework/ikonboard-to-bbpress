@@ -62,14 +62,26 @@ if ( is_admin() && ( !defined( 'DOING_AJAX' ) || !DOING_AJAX ) ) {
 
 }
 
+/**
+ * @param string $message
+ */
 function time_elapsed ( $message = '' ) {
 	static $last = null;
 
 	$now = microtime( true );
 
 	if ( $last != null ) {
-		echo "\n<!-- time_elapsed $message: " . ( $now - $last ) . " -->\n";
+		debug_out( "time_elapsed $message: " . ( $now - $last ) );
 	}
 
 	$last = $now;
+}
+
+/**
+ * @param string $message
+ */
+function debug_out ( $message = "debug out callded" ) {
+	echo "$message<br />";
+	flush();
+	ob_flush();
 }
