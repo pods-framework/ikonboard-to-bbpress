@@ -77,15 +77,6 @@ class IkonboardToBBPress_Admin {
 	protected $table_prefix = 'bp_';
 
 	/**
-	 * Table prefix for Ikonboard.
-	 *
-	 * @since    1.0.0
-	 *
-	 * @var      string
-	 */
-	protected $base_table_prefix = 'bp_';
-
-	/**
 	 *
 	 * @since    1.0.0
 	 *
@@ -366,11 +357,9 @@ class IkonboardToBBPress_Admin {
 		 */
 		global $wpdb;
 
-		$wpdb->select( 'backpacker_ikonboard' );
-
 		foreach ( $this->tables_like as $table_like ) {
 
-			$tables = $wpdb->get_results( "SHOW TABLES LIKE '" . $this->base_table_prefix . $table_like . "%'", ARRAY_N );
+			$tables = $wpdb->get_results( "SHOW TABLES LIKE '" . $this->table_prefix . $table_like . "%'", ARRAY_N );
 
 			if ( !empty( $tables ) ) {
 				foreach ( $tables as $table ) {
@@ -378,8 +367,6 @@ class IkonboardToBBPress_Admin {
 				}
 			}
 		}
-
-		$wpdb->select( DB_NAME );
 
 	}
 
@@ -563,7 +550,7 @@ class IkonboardToBBPress_Admin {
 		 */
 		global $wpdb;
 
-		if ( !in_array( $this->base_table_prefix . 'member_profiles', $this->tables ) ) {
+		if ( !in_array( $this->table_prefix . 'member_profiles', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
@@ -588,7 +575,7 @@ class IkonboardToBBPress_Admin {
 		if ( !isset( $params->object ) ) {
 			return pods_error( __( 'Invalid Object.', 'pods' ) );
 		}
-		elseif ( !in_array( $this->base_table_prefix . 'categories', $this->tables ) || !in_array( $this->base_table_prefix . 'forum_info', $this->tables ) ) {
+		elseif ( !in_array( $this->table_prefix . 'categories', $this->tables ) || !in_array( $this->table_prefix . 'forum_info', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
@@ -617,7 +604,7 @@ class IkonboardToBBPress_Admin {
 		 */
 		global $wpdb;
 
-		if ( !in_array( $this->base_table_prefix . 'forum_topics', $this->tables ) ) {
+		if ( !in_array( $this->table_prefix . 'forum_topics', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
@@ -637,7 +624,7 @@ class IkonboardToBBPress_Admin {
 		 */
 		global $wpdb;
 
-		if ( !in_array( $this->base_table_prefix . 'forum_posts', $this->tables ) ) {
+		if ( !in_array( $this->table_prefix . 'forum_posts', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
@@ -654,7 +641,7 @@ class IkonboardToBBPress_Admin {
 	 */
 	public function migrate_users( $params ) {
 
-		if ( !in_array( $this->base_table_prefix . 'member_profiles', $this->tables ) ) {
+		if ( !in_array( $this->table_prefix . 'member_profiles', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
@@ -703,7 +690,7 @@ class IkonboardToBBPress_Admin {
 		if ( !isset( $params->object ) ) {
 			return pods_error( __( 'Invalid Object.', 'pods' ) );
 		}
-		elseif ( !in_array( $this->base_table_prefix . 'categories', $this->tables ) || !in_array( $this->base_table_prefix . 'forum_info', $this->tables ) ) {
+		elseif ( !in_array( $this->table_prefix . 'categories', $this->tables ) || !in_array( $this->table_prefix . 'forum_info', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
@@ -757,7 +744,7 @@ class IkonboardToBBPress_Admin {
 	 */
 	public function migrate_topics( $params ) {
 
-		if ( !in_array( $this->base_table_prefix . 'forum_topics', $this->tables ) || !in_array( $this->base_table_prefix . 'forum_posts', $this->tables ) ) {
+		if ( !in_array( $this->table_prefix . 'forum_topics', $this->tables ) || !in_array( $this->table_prefix . 'forum_posts', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
@@ -803,7 +790,7 @@ class IkonboardToBBPress_Admin {
 	 */
 	public function migrate_replies( $params ) {
 
-		if ( !in_array( $this->base_table_prefix . 'forum_topics', $this->tables ) || !in_array( $this->base_table_prefix . 'forum_posts', $this->tables ) ) {
+		if ( !in_array( $this->table_prefix . 'forum_topics', $this->tables ) || !in_array( $this->table_prefix . 'forum_posts', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
