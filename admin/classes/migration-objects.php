@@ -15,11 +15,13 @@ class MigrateConfig {
 
 	public $forum_posts;
 
+	public $pods_wizard;
+
 	/**
 	 * @param string|null $prefix
 	 * @param array $table_names
 	 */
-	public function __construct ( $prefix = null, $table_names = array() ) {
+	public function __construct ( $prefix = null, $table_names = array(), $pods_wizard = null ) {
 		$defaults = array(
 			'member_profiles' => 'member_profiles',
 			'categories'      => 'categories',
@@ -35,7 +37,13 @@ class MigrateConfig {
 			}
 			$this->$member_name = $name;
 		}
+
+		if ( is_object( $pods_wizard ) ) {
+			$this->pods_wizard =& $pods_wizard;
+		}
 	}
+
+
 }
 
 /**
@@ -105,6 +113,8 @@ class MigrateUsers {
 		}
 		$values = trim( $values, ',' );
 		$wpdb->query( "INSERT INTO {$wpdb->usermeta} (user_id, meta_key, meta_value) VALUES $values" );
+
+		return $added_rows;
 	}
 }
 
