@@ -74,7 +74,16 @@ class IkonboardToBBPress_Admin {
 	 *
 	 * @var      string
 	 */
-	protected $table_prefix = '';
+	protected $table_prefix = 'bp_';
+
+	/**
+	 * Table prefix for Ikonboard.
+	 *
+	 * @since    1.0.0
+	 *
+	 * @var      string
+	 */
+	protected $base_table_prefix = 'bp_';
 
 	/**
 	 *
@@ -157,8 +166,8 @@ class IkonboardToBBPress_Admin {
 		$this->plugin_slug = $plugin->get_plugin_slug();
 
 		// Load admin style sheet and JavaScript.
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_styles' ) );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_scripts' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_styles' ), 30 );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_scripts' ), 30 );
 
 		// Add the options page and menu item.
 		add_action( 'admin_init', array( $this, 'process_plugin_admin_post' ) );
@@ -169,7 +178,7 @@ class IkonboardToBBPress_Admin {
 		add_filter( 'plugin_action_links_' . $plugin_basename, array( $this, 'add_action_links' ) );
 
 		// Add AJAX handler
-		add_action( 'wp_ajax_' . $this->plugin_slug, array( $this, 'ajax' ) );
+		add_action( 'wp_ajax_' . str_replace( '-', '_', $this->plugin_slug ), array( $this, 'ajax' ) );
 
 	}
 
@@ -209,6 +218,7 @@ class IkonboardToBBPress_Admin {
 		if ( $this->plugin_screen_hook_suffix == $screen->id ) {
 			wp_enqueue_style( $this->plugin_slug . '-admin-styles', plugins_url( 'assets/css/admin.css', __FILE__ ), array(), IkonboardToBBPress::VERSION );
 
+			wp_enqueue_style( 'pods-admin' );
 			wp_enqueue_style( 'pods-wizard' );
 		}
 
@@ -232,6 +242,7 @@ class IkonboardToBBPress_Admin {
 		if ( $this->plugin_screen_hook_suffix == $screen->id ) {
 			wp_enqueue_script( $this->plugin_slug . '-admin-script', plugins_url( 'assets/js/admin.js', __FILE__ ), array( 'jquery' ), IkonboardToBBPress::VERSION );
 
+			wp_enqueue_script( 'pods' );
 			wp_enqueue_script( 'pods-migrate' );
 		}
 
@@ -317,6 +328,9 @@ class IkonboardToBBPress_Admin {
 		global $wpdb;
 
 		$wizard_migration = $this->plugin_slug;
+
+		$wizard_ajax_action = str_replace( '-', '_', $this->plugin_slug );
+
 		$wizard_cleanup = true;
 
 		$wizard_i18n = array(
@@ -352,8 +366,11 @@ class IkonboardToBBPress_Admin {
 		 */
 		global $wpdb;
 
+		$wpdb->select( 'backpacker_ikonboard' );
+
 		foreach ( $this->tables_like as $table_like ) {
-			$tables = $wpdb->get_results( "SHOW TABLES LIKE '" . $this->table_prefix . $table_like . "%'", ARRAY_N );
+
+			$tables = $wpdb->get_results( "SHOW TABLES LIKE '" . $this->base_table_prefix . $table_like . "%'", ARRAY_N );
 
 			if ( !empty( $tables ) ) {
 				foreach ( $tables as $table ) {
@@ -361,6 +378,8 @@ class IkonboardToBBPress_Admin {
 				}
 			}
 		}
+
+		$wpdb->select( DB_NAME );
 
 	}
 
@@ -390,16 +409,23 @@ class IkonboardToBBPress_Admin {
 	 *
 	 * @return mixed|void
 	 */
-	public function ajax( $params ) {
+	public function ajax() {
+
+		$params = (object) pods_unsanitize( $_POST );
 
 		require_once 'classes/migration-objects.php';
 
 		$this->api = pods_api();
 
+		$this->get_tables();
+
 		// Stop notifications / etc in certain plugins
 		define( 'WP_IMPORTING', true );
 
-		if ( !isset( $params->step ) ) {
+		if ( !wp_verify_nonce( $params->_wpnonce, 'pods-migrate' ) ) {
+			return pods_error( __( 'Invalid request.', 'pods' ) );
+		}
+		elseif ( !isset( $params->step ) ) {
 			return pods_error( __( 'Invalid migration process.', 'pods' ) );
 		}
 		elseif ( !isset( $params->type ) ) {
@@ -415,7 +441,9 @@ class IkonboardToBBPress_Admin {
 			$count = number_format( $count );
 		}
 
-		return $count;
+		echo $count;
+
+		die();
 
 	}
 
@@ -535,11 +563,11 @@ class IkonboardToBBPress_Admin {
 		 */
 		global $wpdb;
 
-		if ( !in_array( $this->table_prefix . 'member_profiles', $this->tables ) ) {
+		if ( !in_array( $this->base_table_prefix . 'member_profiles', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$this->table_prefix}member_profiles`" );
+		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table_prefix}member_profiles" );
 
 		return $count;
 
@@ -560,7 +588,7 @@ class IkonboardToBBPress_Admin {
 		if ( !isset( $params->object ) ) {
 			return pods_error( __( 'Invalid Object.', 'pods' ) );
 		}
-		elseif ( !in_array( $this->table_prefix . 'categories', $this->tables ) || !in_array( $this->table_prefix . 'forum_info', $this->tables ) ) {
+		elseif ( !in_array( $this->base_table_prefix . 'categories', $this->tables ) || !in_array( $this->base_table_prefix . 'forum_info', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
@@ -573,7 +601,7 @@ class IkonboardToBBPress_Admin {
 			return pods_error( __( 'Invalid Object.', 'pods' ) );
 		}
 
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$tables[$params->object]}`" );
+		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tables[$params->object]}" );
 
 		return $count;
 
@@ -589,11 +617,11 @@ class IkonboardToBBPress_Admin {
 		 */
 		global $wpdb;
 
-		if ( !in_array( $this->table_prefix . 'forum_topics', $this->tables ) ) {
+		if ( !in_array( $this->base_table_prefix . 'forum_topics', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$this->table_prefix}forum_topics`" );
+		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table_prefix}forum_topics" );
 
 		return $count;
 
@@ -609,11 +637,11 @@ class IkonboardToBBPress_Admin {
 		 */
 		global $wpdb;
 
-		if ( !in_array( $this->table_prefix . 'forum_posts', $this->tables ) ) {
+		if ( !in_array( $this->base_table_prefix . 'forum_posts', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$this->table_prefix}forum_posts`" );
+		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$this->table_prefix}forum_posts" );
 
 		return $count;
 
@@ -626,7 +654,7 @@ class IkonboardToBBPress_Admin {
 	 */
 	public function migrate_users( $params ) {
 
-		if ( !in_array( $this->table_prefix . 'member_profiles', $this->tables ) ) {
+		if ( !in_array( $this->base_table_prefix . 'member_profiles', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
@@ -675,7 +703,7 @@ class IkonboardToBBPress_Admin {
 		if ( !isset( $params->object ) ) {
 			return pods_error( __( 'Invalid Object.', 'pods' ) );
 		}
-		elseif ( !in_array( $this->table_prefix . 'categories', $this->tables ) || !in_array( $this->table_prefix . 'forum_info', $this->tables ) ) {
+		elseif ( !in_array( $this->base_table_prefix . 'categories', $this->tables ) || !in_array( $this->base_table_prefix . 'forum_info', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
@@ -729,7 +757,7 @@ class IkonboardToBBPress_Admin {
 	 */
 	public function migrate_topics( $params ) {
 
-		if ( !in_array( $this->table_prefix . 'forum_topics', $this->tables ) || !in_array( $this->table_prefix . 'forum_posts', $this->tables ) ) {
+		if ( !in_array( $this->base_table_prefix . 'forum_topics', $this->tables ) || !in_array( $this->base_table_prefix . 'forum_posts', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
@@ -775,7 +803,7 @@ class IkonboardToBBPress_Admin {
 	 */
 	public function migrate_replies( $params ) {
 
-		if ( !in_array( $this->table_prefix . 'forum_topics', $this->tables ) || !in_array( $this->table_prefix . 'forum_posts', $this->tables ) ) {
+		if ( !in_array( $this->base_table_prefix . 'forum_topics', $this->tables ) || !in_array( $this->base_table_prefix . 'forum_posts', $this->tables ) ) {
 			return pods_error( __( 'Table(s) not found, it cannot be migrated', 'pods' ) );
 		}
 
