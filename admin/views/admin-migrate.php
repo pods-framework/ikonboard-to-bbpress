@@ -1,23 +1,26 @@
-<?php
-time_elapsed(); // Start timer
-?>
 <div class="wrap">
 	<?php screen_icon(); ?>
 	<h2><?php echo esc_html( get_admin_page_title() ); ?>: Migrate</h2>
 	<?php
-		// Setup config for our environment (table names and prefix)
-		$config = new MigrateConfig( 'bp_' );
 
-		MigrateUsers::migrate( $config );
-		time_elapsed('Migrate users');
+	time_elapsed(); // Start timer
+	$config = new MigrateConfig( 'bp_' ); // Setup config for our environment (table names and prefix)
 
-		MigrateForums::migrate( $config );
-		time_elapsed('Migrate forums');
+	/** @global wpdb $wpdb */
+	global $wpdb;
 
-		MigrateTopics::migrate( $config );
-		time_elapsed('Migrate topics');
+	MigrateTempTables::migrate( $config );
 
-		MigrateReplies::migrate( $config );
-		time_elapsed('Migrate replies');
+	MigrateUsers::migrate( $config );
+	time_elapsed( 'Migrate users completed' );
+
+	MigrateForums::migrate( $config );
+	time_elapsed( 'Migrate forums completed' );
+
+	MigrateTopics::migrate( $config );
+	time_elapsed( 'Migrate topics' );
+
+	MigrateReplies::migrate( $config );
+	time_elapsed( 'Migrate replies' );
 	?>
 </div>

@@ -15,11 +15,16 @@ class MigrateConfig {
 
 	public $forum_posts;
 
+	public $temp_topics;
+
+	public $temp_replies;
+
 	public $pods_wizard;
 
 	/**
 	 * @param string|null $prefix
 	 * @param array $table_names
+	 * @param null $pods_wizard
 	 */
 	public function __construct ( $prefix = null, $table_names = array(), $pods_wizard = null ) {
 		$defaults = array(
@@ -27,7 +32,9 @@ class MigrateConfig {
 			'categories'      => 'categories',
 			'forum_info'      => 'forum_info',
 			'forum_topics'    => 'forum_topics',
-			'forum_posts'     => 'forum_posts'
+			'forum_posts'     => 'forum_posts',
+			'temp_topics'     => 'temp_topics',
+			'temp_replies'    => 'temp_replies'
 		);
 		$table_names = array_merge( $defaults, $table_names );
 
@@ -42,8 +49,99 @@ class MigrateConfig {
 			$this->pods_wizard =& $pods_wizard;
 		}
 	}
+}
 
+/**
+ * Class MigragrateTempTables
+ */
+class MigrateTempTables {
 
+	/**
+	 * @param MigrateConfig $config
+	 *
+	 * @return null|string
+	 */
+	public static function migrate ( $config ) {
+		/** @global wpdb $wpdb */
+		global $wpdb;
+
+		debug_out( 'Importing all posts to a temp table...' );
+		$wpdb->query( "
+			CREATE TABLE IF NOT EXISTS `{$config->temp_replies}` (
+				`FORUM_ID` bigint(10) DEFAULT NULL,
+				`TOPIC_ID` bigint(10) unsigned NOT NULL DEFAULT '0',
+				`TOPIC_TITLE` varchar(70) NOT NULL DEFAULT '',
+				`POST_ID` bigint(10) unsigned DEFAULT '0',
+				`AUTHOR` varchar(32) DEFAULT NULL,
+				`IP_ADDR` varchar(16) DEFAULT NULL,
+				`POST_DATE` int(10) NOT NULL DEFAULT '0',
+				`POST` text
+			) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+		" );
+
+		$wpdb->query( "
+			INSERT INTO `{$config->temp_replies}`
+				(`FORUM_ID`, `TOPIC_ID`, `TOPIC_TITLE`, `POST_ID`, `AUTHOR`, `IP_ADDR`, `POST_DATE`, `POST`)
+			SELECT
+				`t`.`FORUM_ID`, `t`.`TOPIC_ID`, `TOPIC_TITLE`, `POST_ID`, `AUTHOR`, `IP_ADDR`, `POST_DATE`, `POST`
+			FROM
+				`{$config->forum_topics}` AS `t` LEFT JOIN `{$config->forum_posts}` AS `p` ON `p`.`TOPIC_ID` = `t`.`TOPIC_ID`
+		" );
+		time_elapsed( 'All posts copied' );
+
+		debug_out( "Indexing posts..." );
+		$wpdb->query( "
+			ALTER TABLE `{$config->temp_replies}`
+			ADD INDEX `topic_id`  (`TOPIC_ID` ASC),
+			ADD INDEX `post_id`   (`POST_ID` ASC),
+			ADD INDEX `post_date` (`POST_DATE` ASC)
+		" );
+		time_elapsed( 'Indexes created' );
+
+		debug_out( 'Importing all topics to a temp table...' );
+		$wpdb->query( "
+			CREATE TABLE IF NOT EXISTS `{$config->temp_topics}` (
+				`FORUM_ID` bigint(10) DEFAULT NULL,
+				`TOPIC_ID` bigint(10) unsigned NOT NULL DEFAULT '0',
+				`TOPIC_TITLE` varchar(70) NOT NULL DEFAULT '',
+				`POST_ID` bigint(10) unsigned DEFAULT '0',
+				`AUTHOR` varchar(32) DEFAULT NULL,
+				`IP_ADDR` varchar(16) DEFAULT NULL,
+				`POST_DATE` int(10) NOT NULL DEFAULT '0',
+				`POST` text
+			) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+		" );
+		$wpdb->query( "
+			INSERT INTO `{$config->temp_topics}`
+				(`FORUM_ID`, `TOPIC_ID`, `TOPIC_TITLE`, `POST_ID`, `AUTHOR`, `IP_ADDR`, `POST_DATE`, `POST`)
+			SELECT
+			   `FORUM_ID`, `TOPIC_ID`, `TOPIC_TITLE`, `POST_ID`, `AUTHOR`, `IP_ADDR`, `POST_DATE`, `POST`
+			FROM
+				`{$config->temp_replies}`
+			GROUP BY `TOPIC_ID`
+			HAVING MIN(`POST_DATE`)
+		" );
+		time_elapsed( 'All topics copied' );
+
+		debug_out( 'Indexing topics...' );
+		$wpdb->query( "
+			ALTER TABLE `{$config->temp_topics}`
+			ADD INDEX `topic_id`  (`TOPIC_ID` ASC),
+			ADD INDEX `post_id`   (`POST_ID` ASC),
+			ADD INDEX `post_date` (`POST_DATE` ASC)
+		" );
+		time_elapsed( 'Indexes created' );
+
+		debug_out( 'Removing topics from reply temp table...' );
+		$wpdb->query( "
+			DELETE FROM `{$config->temp_replies}`
+			USING `temp_replies`, `temp_topics`
+			WHERE `temp_replies`.`POST_ID` = `temp_topics`.`POST_ID`
+		" );
+		time_elapsed( 'Topics removed from reply table' );
+
+		debug_out( 'Temp table setup complete.' );
+	}
 }
 
 /**
@@ -53,22 +151,27 @@ class MigrateUsers {
 
 	/**
 	 * @param MigrateConfig $config
+	 *
+	 * @return null|string
 	 */
 	public static function migrate ( $config ) {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
-		debug_out( 'Querying all members...' );
 		// Get all member records from Ikonboard
+		debug_out( 'Querying all members...' );
 		$members = $wpdb->get_results( "
-			SELECT *
-			FROM {$config->member_profiles}
+			SELECT
+				`MEMBER_ID`, `MEMBER_NAME`, `MEMBER_EMAIL`, `MEMBER_JOINED`
+			FROM
+				`{$config->member_profiles}`
 		" );
 		$records_selected = count( $members );
 		debug_out( "Query returned $records_selected rows" );
 
 		// Build a series of values strings for the insert
 		$values = '';
+
 		foreach ( $members as $this_member ) {
 			$name = addslashes( $this_member->MEMBER_NAME );
 			$email = addslashes( $this_member->MEMBER_EMAIL );
@@ -89,19 +192,14 @@ class MigrateUsers {
 		// Pull off the last trailing comma and run the full insert
 		$values = trim( $values, ',' );
 		$keys = implode( ', ', array_keys( $user_data ) );
-		$wpdb->query( "INSERT INTO {$wpdb->users} ($keys) VALUES $values" );
+		$wpdb->query( "INSERT INTO `{$wpdb->users}` ($keys) VALUES $values" );
 
 		// Statement order is significant here: ROW_COUNT() applies ONLY to the last sql statement, even a SELECT
 		// LAST_INSERT_ID() applies to the most recently executed INSERT (returns the FIRST auto-generated ID if bulk)
 		$added_rows = $wpdb->get_var( 'SELECT ROW_COUNT();' );
 		$first_new_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
 
-		debug_out( "Members: $records_selected : $added_rows" );
-
-		if ( $added_rows != $records_selected ) {
-			// ToDo: decide what to do here if the insert didn't add all rows.  We can't do the loop to add
-			// meta correctly if we didn't insert all records.
-		}
+		debug_out( "Added $added_rows members, adding meta..." );
 
 		// Do it again for meta
 		$values = '';
@@ -112,7 +210,7 @@ class MigrateUsers {
 			$user_id++;
 		}
 		$values = trim( $values, ',' );
-		$wpdb->query( "INSERT INTO {$wpdb->usermeta} (user_id, meta_key, meta_value) VALUES $values" );
+		$wpdb->query( "INSERT INTO `{$wpdb->usermeta}` (user_id, meta_key, meta_value) VALUES $values" );
 
 		return $added_rows;
 	}
@@ -131,7 +229,12 @@ class MigrateForums {
 		global $wpdb;
 
 		// Ikonboard categories become top-level forums (no parent)
-		$categories = $wpdb->get_results( "SELECT * FROM {$config->categories}" );
+		$categories = $wpdb->get_results( "
+			SELECT
+				`CAT_ID`, `CAT_NAME`, `CAT_POS`
+			FROM
+				`{$config->categories}`
+		" );
 		foreach ( $categories as $this_cat ) {
 			$post_title = addslashes( $this_cat->CAT_NAME );
 			$post_name = sanitize_title( $post_title );
@@ -151,7 +254,12 @@ class MigrateForums {
 		}
 
 		// Ikonboard Forums
-		$forums = $wpdb->get_results( "SELECT * FROM {$config->forum_info}" );
+		$forums = $wpdb->get_results( "
+			SELECT
+				`FORUM_ID`, `FORUM_NAME`, `FORUM_DESC`, `FORUM_POSITION`, `CATEGORY`
+			FROM
+				`{$config->forum_info}`
+		" );
 		foreach ( $forums as $this_forum ) {
 			$post_title = addslashes( $this_forum->FORUM_NAME );
 			$post_name = sanitize_title( $post_title );
@@ -159,7 +267,7 @@ class MigrateForums {
 			$menu_order = (int) addslashes( $this_forum->FORUM_POSITION );
 
 			// Lookup the forum parent via the Ikonboard category id we stash in meta
-			$post_parent = (int) $wpdb->get_var( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key='IKON_CAT_ID_{$this_forum->CATEGORY}'" );
+			$post_parent = (int) $wpdb->get_var( "SELECT `post_id` FROM `{$wpdb->postmeta}` WHERE `meta_key`='IKON_CAT_ID_{$this_forum->CATEGORY}'" );
 
 			$post_data = array(
 				'post_content' => "'$post_content'",
@@ -173,13 +281,13 @@ class MigrateForums {
 
 			// Ikonboard forum meta
 			$ikon_forum_id = (string) addslashes( $this_forum->FORUM_ID );
-			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_FORUM_ID_$ikon_forum_id', '$ikon_forum_id')" );
+			$wpdb->query( "INSERT INTO `{$wpdb->postmeta}` (`post_id`, `meta_key`, `meta_value`) VALUES ($post_id, 'IKON_FORUM_ID_$ikon_forum_id', '$ikon_forum_id')" );
 		}
 
-		// Set all the guids (faster to set all the guids at once than one at a time in the "big loop")
+		// Set all the guids
 		$site_url = get_site_url();
 		$params = '/?post_type=forum&#038;p=';
-		$wpdb->query( "UPDATE {$wpdb->posts} SET guid = CONCAT('$site_url', '$params', ID) WHERE guid = '' AND post_type = 'forum'" );
+		$wpdb->query( "UPDATE `{$wpdb->posts}` SET `guid` = CONCAT('$site_url', '$params', `ID`) WHERE `guid` = '' AND `post_type` = 'forum'" );
 	}
 
 	/**
@@ -210,20 +318,48 @@ class MigrateForums {
 		$keys = implode( ', ', array_keys( $post_data ) );
 		$values = implode( ', ', $post_data );
 
-		$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES ($values)" );
+		$wpdb->query( "INSERT INTO `{$wpdb->posts}` ($keys) VALUES ($values)" );
 		return $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
 	}
-
 }
 
 /**
- * Class MigrateTopics
+ * Class BufferedSelect
  */
-class MigrateTopics {
+abstract class MigrateBatched {
 
-	const ROWS_TO_BUFFER = 30000;
+	const ROWS_TO_BUFFER = 50000;
 
-	private static $first_new_id = null;
+	/**
+	 * @var string
+	 */
+	protected static $target_table = '';
+
+	/**
+	 * @var string
+	 */
+	protected static $post_type = '';
+
+	/**
+	 * @var int
+	 */
+	protected static $current_start_row = 0;
+
+	/**
+	 * @var int|null
+	 */
+	protected static $first_new_id = null;
+
+	/**
+	 * @var int
+	 */
+	protected static $row_count = 0;
+
+	/**
+	 * @param array $records
+	 */
+	protected static function process_batch ( $records ) {
+	}
 
 	/**
 	 * @param MigrateConfig $config
@@ -232,22 +368,81 @@ class MigrateTopics {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
-		debug_out( "Querying all topics..." );
+		$table = self::$target_table;
 
-		// Topics are separate in Ikonboard.  Join the topic with the oldest post in the topic to get the bbPress topic
-		$topics = $wpdb->get_results( "
-			SELECT
-				*
-			FROM
-				{$config->forum_topics} AS t
-				LEFT JOIN {$config->forum_posts} AS p
-					ON p.TOPIC_ID = t.TOPIC_ID
-					AND p.POST_DATE = ( SELECT MIN(POST_DATE) FROM {$config->forum_posts} AS ptemp WHERE ptemp.TOPIC_ID = t.TOPIC_ID )
-		" );
-		$records_selected = count( $topics );
+		do {
+			$start = self::$current_start_row;
+			$rows = self::ROWS_TO_BUFFER;
 
-		debug_out( "Query returned $records_selected rows.<br />" );
-		debug_out( "Processing topic posts..." );
+			debug_out( sprintf( "Selecting rows %d to %d...", $start + 1, $start + $rows ) );
+			$results = $wpdb->get_results( "SELECT * FROM `{$table}` LIMIT $start, $rows" );
+
+			self::$row_count += count( $results );
+			self::$current_start_row += self::ROWS_TO_BUFFER;
+			static::process_batch( $results );
+		}
+		while ( count( $results ) == self::ROWS_TO_BUFFER );
+
+		// Ensure unique page_name
+		debug_out( 'Updating post slugs...' );
+		$post_type = self::$post_type;
+		$wpdb->query( "UPDATE `{$wpdb->posts}` SET `post_name` = CONCAT(`post_name`, '-', `ID`) WHERE `post_type` = '$post_type'" );
+
+		// Set all the guids for the new posts
+		debug_out( 'Updating all topic guids...' );
+		$site_url = get_site_url();
+		$params = "/?post_type=$post_type&#038;p=";
+		$wpdb->query( "UPDATE `{$wpdb->posts}` SET `guid` = CONCAT('$site_url', '$params', `ID`) WHERE `guid` = '' AND `post_type` = '$post_type'" );
+	}
+
+	/**
+	 * @param string $keys
+	 * @param string $values
+	 */
+	protected static function insert_posts ( $keys, $values ) {
+		/** @global wpdb $wpdb */
+		global $wpdb;
+
+		debug_out( 'Inserting into wp_posts' );
+		$values = rtrim( $values, ',' );
+		$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES $values" );
+		self::$first_new_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
+	}
+
+	/**
+	 * @param string $keys
+	 * @param string $values
+	 */
+	protected static function insert_postmeta ( $keys, $values ) {
+		/** @global wpdb $wpdb */
+		global $wpdb;
+
+		debug_out( 'Inserting into wp_postmeta' );
+		$values = rtrim( $values, ',' );
+		$wpdb->query( "INSERT INTO {$wpdb->postmeta} ($keys) VALUES $values" );
+	}
+}
+
+/**
+ * Class MigrateTopics
+ */
+class MigrateTopics extends MigrateBatched {
+
+	/**
+	 * @param MigrateConfig $config
+	 */
+	public static function migrate ( $config ) {
+		self::$target_table = $config->temp_topics;
+		self::$post_type = 'topic';
+		parent::migrate( $config );
+	}
+
+	/**
+	 * @param array $topics
+	 */
+	protected static function process_batch ( $topics ) {
+		/** @global wpdb $wpdb */
+		global $wpdb;
 
 		$keys = '';
 		$values = '';
@@ -282,26 +477,18 @@ class MigrateTopics {
 			$values .= '(' . implode( ', ', $post_data ) . '),';
 			$row++;
 
-			if ( 0 == $row % 1000 ) {
+			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering topic post $row" );
 			}
-
-			if ( 0 == $row % self::ROWS_TO_BUFFER ) {
-				// Write everything out to this point and clear the values string buffer
-				self::insert_posts( $keys, $values );
-				$values = '';
-			}
 		}
-		// Insert the remainder in the buffer
 		self::insert_posts( $keys, $values );
-
-		debug_out( 'Processing topic meta...' );
 
 		// topic meta
 		$values = '';
 		$post_id = self::$first_new_id;
 		$row = 0;
-		debug_out( "First new topic ID = $post_id" );
+		debug_out( 'Processing topic meta...' );
+		debug_out( "(First new topic ID = $post_id)" );
 		foreach ( $topics as $this_topic ) {
 			$ikon_topic_id = (string) addslashes( $this_topic->TOPIC_ID );
 			$author_ip = (string) addslashes( $this_topic->IP_ADDR );
@@ -313,102 +500,36 @@ class MigrateTopics {
 			$values .= "($post_id, '_bbp_author_ip', '$author_ip'),";
 			$row++;
 
-			if ( 0 == $row % 1000 ) {
+			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering topic meta $row" );
-			}
-
-			if ( 0 == $row % self::ROWS_TO_BUFFER ) {
-				// Write everything out to this point and clear the values string buffer
-				self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
-				$values = '';
 			}
 
 			$post_id++;
 		}
-		// Insert the remainder in the buffer
 		self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
-
-		// Ensure unique page_name
-		debug_out( 'Updating all topic post slugs...' );
-		$wpdb->query( "UPDATE {$wpdb->posts} SET post_name = CONCAT(post_name, '-', ID) WHERE post_type = 'topic'" );
-		debug_out( 'Post slugs updated.' );
-
-		// Set all the guids for the new posts
-		debug_out( 'Updating all topic guids...' );
-		$site_url = get_site_url();
-		$params = '/?post_type=topic&#038;p=';
-		$wpdb->query( "UPDATE {$wpdb->posts} SET guid = CONCAT('$site_url', '$params', ID) WHERE guid = '' AND post_type = 'topic'" );
-		debug_out( 'Guids updated.' );
-	}
-
-	/**
-	 * @param string $keys
-	 * @param string $values
-	 */
-	private static function insert_posts ( $keys, $values ) {
-		/** @global wpdb $wpdb */
-		global $wpdb;
-
-		debug_out( 'Inserting into wp_posts' );
-		$values = rtrim( $values, ',' );
-		$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES $values" );
-		debug_out( 'Insert done' );
-
-		if ( null === self::$first_new_id ) {
-			self::$first_new_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
-		}
-	}
-
-	/**
-	 * @param string $keys
-	 * @param string $values
-	 */
-	private static function insert_postmeta ( $keys, $values ) {
-		/** @global wpdb $wpdb */
-		global $wpdb;
-
-		$values = rtrim( $values, ',' );
-		debug_out( 'Inserting into wp_postmeta' );
-		$wpdb->query( "INSERT INTO {$wpdb->postmeta} ($keys) VALUES $values" );
-		debug_out( 'Insert done' );
 	}
 }
 
 /**
  * Class MigrateReplies
  */
-class MigrateReplies {
-
-	const ROWS_TO_BUFFER = 30000;
-
-	private static $first_new_id = null;
+class MigrateReplies extends MigrateBatched {
 
 	/**
 	 * @param MigrateConfig $config
 	 */
 	public static function migrate ( $config ) {
+		self::$target_table = $config->temp_replies;
+		self::$post_type = 'reply';
+		parent::migrate( $config );
+	}
+
+	/**
+	 * @param array $replies
+	 */
+	protected static function process_batch ( $replies ) {
 		/** @global wpdb $wpdb */
 		global $wpdb;
-
-		$date = date( 'Y-m-d H:i:s' );
-
-		debug_out( "Querying all replies..." );
-
-		// Ignore the oldest post in Ikonboard, that one was used for the topic in bbPress
-		$replies = $wpdb->get_results( "
-			SELECT
-				*
-			FROM
-				{$config->forum_topics} AS t
-				LEFT JOIN {$config->forum_posts} AS p
-					ON p.TOPIC_ID = t.TOPIC_ID
-					AND p.POST_DATE != ( SELECT MIN(POST_DATE) FROM {$config->forum_posts} AS ptemp WHERE ptemp.TOPIC_ID = t.TOPIC_ID )
-			LIMIT 50000
-		" ); // ToDo: Don't leave the limit on there
-		$records_selected = count( $replies );
-
-		debug_out( "Query returned $records_selected rows.<br />" );
-		debug_out( "Processing reply posts..." );
 
 		$keys = '';
 		$values = '';
@@ -443,25 +564,18 @@ class MigrateReplies {
 			$values .= '(' . implode( ', ', $post_data ) . '),';
 			$row++;
 
-			if ( 0 == $row % 1000 ) {
+			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering reply post $row" );
-			}
-
-			if ( 0 == $row % self::ROWS_TO_BUFFER ) {
-				// Write everything out to this point and clear the values string buffer
-				self::insert_posts( $keys, $values );
-				$values = '';
 			}
 		}
 		// Insert the remainder in the buffer
 		self::insert_posts( $keys, $values );
 
-		debug_out( 'Processing reply meta...' );
-
 		// reply meta
 		$values = '';
 		$post_id = self::$first_new_id;
 		$row = 0;
+		debug_out( 'Processing reply meta...' );
 		debug_out( "First new reply ID = $post_id" );
 		foreach ( $replies as $this_reply ) {
 			$ikon_post_id = (string) addslashes( $this_reply->POST_ID );
@@ -475,64 +589,12 @@ class MigrateReplies {
 			$values .= "($post_id, '_bbp_author_ip', '$author_ip'),";
 			$row++;
 
-			if ( 0 == $row % 1000 ) {
+			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering reply meta $row" );
-			}
-
-			if ( 0 == $row % self::ROWS_TO_BUFFER ) {
-				// Write everything out to this point and clear the values string buffer
-				self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
-				$values = '';
 			}
 
 			$post_id++;
 		}
-		// Insert the remainder in the buffer
 		self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
-
-		// Ensure unique page_name
-		debug_out( 'Updating all reply post slugs...' );
-		$wpdb->query( "UPDATE {$wpdb->posts} SET post_name = CONCAT(post_name, '-', ID) WHERE post_type = 'reply'" );
-		debug_out( 'Post slugs updated.' );
-
-		// Set all the guids for the new posts
-		debug_out( 'Updating all reply guids...' );
-		$site_url = get_site_url();
-		$params = '/?post_type=reply&#038;p=';
-		$wpdb->query( "UPDATE {$wpdb->posts} SET guid = CONCAT('$site_url', '$params', ID) WHERE guid = '' AND post_type = 'reply'" );
-		debug_out( 'Guids updated.' );
 	}
-
-	/**
-	 * @param string $keys
-	 * @param string $values
-	 */
-	private static function insert_posts ( $keys, $values ) {
-		/** @global wpdb $wpdb */
-		global $wpdb;
-
-		debug_out( 'Inserting into wp_posts' );
-		$values = rtrim( $values, ',' );
-		$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES $values" );
-		debug_out( 'Insert done' );
-
-		if ( null === self::$first_new_id ) {
-			self::$first_new_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
-		}
-	}
-
-	/**
-	 * @param string $keys
-	 * @param string $values
-	 */
-	private static function insert_postmeta ( $keys, $values ) {
-		/** @global wpdb $wpdb */
-		global $wpdb;
-
-		$values = rtrim( $values, ',' );
-		debug_out( 'Inserting into wp_postmeta' );
-		$wpdb->query( "INSERT INTO {$wpdb->postmeta} ($keys) VALUES $values" );
-		debug_out( 'Insert done' );
-	}
-
 }

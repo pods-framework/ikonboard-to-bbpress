@@ -65,13 +65,13 @@ if ( is_admin() ) {
 /**
  * @param string $message
  */
-function time_elapsed ( $message = '' ) {
+function time_elapsed ( $message = 'time_elapsed: ' ) {
 	static $last = null;
 
 	$now = microtime( true );
 
 	if ( $last != null ) {
-		debug_out( "time_elapsed $message: " . ( $now - $last ) );
+		debug_out( "$message: " . ( $now - $last ) );
 	}
 
 	$last = $now;
