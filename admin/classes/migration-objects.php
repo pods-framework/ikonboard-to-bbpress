@@ -162,7 +162,7 @@ class MigrateUsers {
 		debug_out( 'Querying all members...' );
 		$members = $wpdb->get_results( "
 			SELECT
-				`MEMBER_ID`, `MEMBER_NAME`, `MEMBER_EMAIL`, `MEMBER_JOINED`
+				`MEMBER_ID`, `MEMBER_NAME`, `MEMBER_EMAIL`, `MEMBER_JOINED`, `MEMBER_PASSWORD`
 			FROM
 				`{$config->member_profiles}`
 		" );
@@ -177,11 +177,18 @@ class MigrateUsers {
 			$email = addslashes( $this_member->MEMBER_EMAIL );
 			$user_registered = date( 'Y-m-d H:i:s', (int) $this_member->MEMBER_JOINED );
 
+			$password = '';
+
+			if ( 32 == strlen( $this_member->MEMBER_PASSWORD ) ) {
+				$password = $this_member->MEMBER_PASSWORD;
+			}
+
 			// Just doing it this way because it's easier to maintain the key/value list.
 			// The keys are only used once, after the last iteration of the loop
 			$user_data = array(
 				'user_login'      => "'$name'",
-				'user_nicename'   => "'$name'",
+				'user_pass'       => "'$password'",
+				'user_nicename'   => "'" . sanitize_title( $name ) . "'", // sanitize name for URL use
 				'display_name'    => "'$name'",
 				'user_email'      => "'$email'",
 				'user_registered' => "'$user_registered'"
