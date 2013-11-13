@@ -81,7 +81,9 @@ function time_elapsed ( $message = 'time_elapsed: ' ) {
  * @param string $message
  */
 function debug_out ( $message = "debug out callded" ) {
-	echo "$message<br />";
+	if ( !defined( 'DOING_AJAX' ) || !DOING_AJAX ) {
+		echo "$message<br />";
+	}
 	flush();
 	ob_flush();
 }
