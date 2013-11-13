@@ -135,8 +135,8 @@ class MigrateTempTables {
 		debug_out( 'Removing topics from reply temp table...' );
 		$wpdb->query( "
 			DELETE FROM `{$config->temp_replies}`
-			USING `temp_replies`, `temp_topics`
-			WHERE `temp_replies`.`POST_ID` = `temp_topics`.`POST_ID`
+			USING `{$config->temp_replies}`, `{$config->temp_topics}`
+			WHERE `{$config->temp_replies}`.`POST_ID` = `{$config->temp_topics}`.`POST_ID`
 		" );
 		time_elapsed( 'Topics removed from reply table' );
 
@@ -324,7 +324,7 @@ class MigrateForums {
 }
 
 /**
- * Class BufferedSelect
+ * Class MigrateBatched
  */
 abstract class MigrateBatched {
 
