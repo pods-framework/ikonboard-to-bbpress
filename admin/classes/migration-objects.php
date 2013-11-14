@@ -21,6 +21,12 @@ class MigrateConfig {
 
 	public $pods_wizard;
 
+	public $page = 1;
+
+	public $limit = 0;
+
+	public $offset = 0;
+
 	/**
 	 * @param string|null $prefix
 	 * @param array $table_names
@@ -42,11 +48,18 @@ class MigrateConfig {
 			if ( !empty( $prefix ) ) {
 				$name = $prefix . $name;
 			}
-			$this->$member_name = $name;
+
+			$this->{$member_name} = $name;
 		}
 
 		if ( is_object( $pods_wizard ) ) {
 			$this->pods_wizard =& $pods_wizard;
+		}
+
+		if ( 0 < $this->limit ) {
+			if ( empty( $this->offset ) && 1 < $this->page ) {
+				$this->offset = ( $this->limit * ( $this->page - 1 ) );
+			}
 		}
 	}
 }
@@ -160,13 +173,31 @@ class MigrateUsers {
 
 		// Get all member records from Ikonboard
 		debug_out( 'Querying all members...' );
+
+		$limit = '';
+
+		if ( 0 < $config->page && 0 < $config->limit ) {
+			$limit = "LIMIT {$config->offset}, {$config->limit}";
+		}
+
 		$members = $wpdb->get_results( "
 			SELECT
-				`MEMBER_ID`, `MEMBER_NAME`, `MEMBER_EMAIL`, `MEMBER_JOINED`, `MEMBER_PASSWORD`
+				`p`.`MEMBER_ID`, `p`.`MEMBER_NAME`, `p`.`MEMBER_EMAIL`, `p`.`MEMBER_JOINED`
 			FROM
-				`{$config->member_profiles}`
+				`{$config->member_profiles}` AS `p`
+			LEFT JOIN
+				`{$wpdb->usermeta}` AS `um` ON `um`.`meta_key` = CONCAT( 'IKON_MEMBER_ID_', `p`.`MEMBER_ID` )
+			WHERE
+				`um`.`meta_value` IS NULL
+			{$limit}
 		" );
+
 		$records_selected = count( $members );
+
+		if ( empty( $records_selected ) ) {
+			return 0;
+		}
+
 		debug_out( "Query returned $records_selected rows" );
 
 		// Build a series of values strings for the insert
@@ -193,6 +224,7 @@ class MigrateUsers {
 				'user_email'      => "'$email'",
 				'user_registered' => "'$user_registered'"
 			);
+
 			$values .= '(' . implode( ', ', $user_data ) . '),';
 		}
 
@@ -218,6 +250,10 @@ class MigrateUsers {
 		}
 		$values = trim( $values, ',' );
 		$wpdb->query( "INSERT INTO `{$wpdb->usermeta}` (user_id, meta_key, meta_value) VALUES $values" );
+
+		if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+			return $records_selected;
+		}
 
 		return $added_rows;
 	}
