@@ -447,7 +447,7 @@ class IkonboardToBBPress_Admin {
 			$this->progress[ 'meta' ][ $method ] = array();
 		}
 
-		if ( null !== $x ) {
+		if ( null !== $x && '' !==  $x ) {
 			if ( !isset( $this->progress[ 'meta' ][ $method ][ $x ] ) || !is_array( $this->progress[ 'meta' ][ $method ][ $x ] ) ) {
 				$this->progress[ 'meta' ][ $method ][ $x ] = array();
 			}
@@ -476,7 +476,7 @@ class IkonboardToBBPress_Admin {
 			return false;
 		}
 
-		if ( null !== $x ) {
+		if ( null !== $x && '' !==  $x ) {
 			if ( !isset( $this->progress[ 'meta' ][ $method ][ $x ] ) || !is_array( $this->progress[ 'meta' ][ $method ][ $x ] ) ) {
 				return false;
 			}
@@ -502,7 +502,7 @@ class IkonboardToBBPress_Admin {
 
 		$method = str_replace( 'migrate_', '', $method );
 
-		if ( null !== $x ) {
+		if ( null !== $x && '' !==  $x ) {
 			if ( !isset( $this->progress[ $method ] ) || !is_array( $this->progress[ $method ] ) ) {
 				$this->progress[ $method ] = array();
 			}
@@ -528,7 +528,7 @@ class IkonboardToBBPress_Admin {
 		$method = str_replace( 'migrate_', '', $method );
 
 		if ( isset( $this->progress[ $method ] ) ) {
-			if ( null === $x ) {
+			if ( null === $x || '' ===  $x ) {
 				return $this->progress[ $method ];
 			}
 			elseif ( is_array( $this->progress[ $method ] ) && isset( $this->progress[ $method ][ $x ] ) ) {
@@ -651,32 +651,40 @@ class IkonboardToBBPress_Admin {
 			return '1';
 		}
 
-		$last_id = (int) $progress;
+		$last_page = max( 1, (int) $progress );
 
 		$config = new MigrateConfig( $this->table_prefix, array(), $this );
 
+		/*$config->limit = 10000;
+		$config->page = 1;*/
+
+		if ( 1 < $last_page ) {
+			$config->page = $last_page;
+		}
+
 		$total_found = $this->prepare_users( $params );
 
-		//$migration_limit = $this->limit_users;
-
-		if ( empty( $last_id ) ) {
+		if ( empty( $last_page ) ) {
 			$this->update_progress_meta( 'start', __FUNCTION__, time(), $params->object );
 			$this->update_progress_meta( 'total', __FUNCTION__, $total_found, $params->object );
 		}
 
-		$this->update_progress_meta( 'left', __FUNCTION__, $total_found, $params->object );
+		$this->update_progress_meta( 'left', __FUNCTION__, ( $total_found - ( $config->limit * $config->page ) ), $params->object );
+		//$this->update_progress_meta( 'left', __FUNCTION__, ( $total_found - ( $config->limit * $config->page ) ), $params->object );
 
 		$added_rows = MigrateUsers::migrate( $config );
 
 		// All done!
-		//if ( $added_rows < $migration_limit || 0 == $added_rows ) {
+		if ( $added_rows < $config->limit || 0 == $added_rows ) {
 			$this->update_progress( __FUNCTION__, true, $params->object );
 
 			return '1';
-		//}
+		}
 
 		// To be continued...
-		//return '-2';
+		$this->update_progress( __FUNCTION__, ( $last_page + 1 ), $params->object );
+
+		return '-2';
 
 	}
 
