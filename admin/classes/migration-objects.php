@@ -181,7 +181,7 @@ class MigrateUsers {
 		}
 
 		$members = $wpdb->get_results( "
-			SELECT
+			SELECT DISTINCT
 				`p`.`MEMBER_ID`, `p`.`MEMBER_NAME`, `p`.`MEMBER_EMAIL`, `p`.`MEMBER_JOINED`
 			FROM
 				`{$config->member_profiles}` AS `p`
@@ -246,6 +246,12 @@ class MigrateUsers {
 		foreach ( $members as $this_member ) {
 			$member_id = addslashes( $this_member->MEMBER_ID );
 			$values .= "($user_id, 'IKON_MEMBER_ID_$member_id', '$member_id'),";
+
+			$capabilities = array( get_option( 'default_role' ) => true );
+			$capabilities = serialize( $capabilities );
+			$capabilities = addslashes( $capabilities );
+
+			$values .= "($user_id, '{$wpdb->prefix}capabilities', '$capabilities'),";
 			$user_id++;
 		}
 		$values = trim( $values, ',' );
@@ -310,7 +316,7 @@ class MigrateForums {
 			$menu_order = (int) addslashes( $this_forum->FORUM_POSITION );
 
 			// Lookup the forum parent via the Ikonboard category id we stash in meta
-			$post_parent = (int) $wpdb->get_var( "SELECT `post_id` FROM `{$wpdb->postmeta}` WHERE `meta_key`='IKON_CAT_ID_{$this_forum->CATEGORY}'" );
+			$post_parent = (int) $wpdb->get_var( "SELECT `post_id` FROM `{$wpdb->postmeta}` WHERE `meta_key`='IKON_CAT_ID_{$this_forum->CATEGORY}' LIMIT 1" );
 
 			$post_data = array(
 				'post_content' => "'$post_content'",
@@ -418,7 +424,28 @@ abstract class MigrateBatched {
 			$rows = self::ROWS_TO_BUFFER;
 
 			debug_out( sprintf( "Selecting rows %d to %d...", $start + 1, $start + $rows ) );
-			$results = $wpdb->get_results( "SELECT * FROM `{$table}` LIMIT $start, $rows" );
+
+			$joinwhere = '';
+
+			if ( in_array( self::$post_type, array( 'topic', 'reply' ) ) ) {
+				$concat = "CONCAT( 'IKON_POST_ID_', `t`.`POST_ID` )";
+
+				if ( 'topic' == self::$post_type ) {
+					$concat = "CONCAT( 'IKON_TOPIC_ID_', `t`.`TOPIC_ID` )";
+				}
+
+				$joinwhere = "
+					LEFT JOIN `{$wpdb->postmeta}` AS `pm` ON `pm`.`meta_key` = {$concat}
+					WHERE `pm`.`meta_value` IS NULL
+				";
+			}
+
+			$results = $wpdb->get_results( "
+				SELECT DISTINCT `t`.*
+				FROM `{$table}` AS `t`
+				{$joinwhere}
+				LIMIT {$start}, {$rows}
+			" );
 
 			self::$row_count += count( $results );
 			self::$current_start_row += self::ROWS_TO_BUFFER;
@@ -436,6 +463,8 @@ abstract class MigrateBatched {
 		$site_url = get_site_url();
 		$params = "/?post_type=$post_type&#038;p=";
 		$wpdb->query( "UPDATE `{$wpdb->posts}` SET `guid` = CONCAT('$site_url', '$params', `ID`) WHERE `guid` = '' AND `post_type` = '$post_type'" );
+
+		return self::$row_count;
 	}
 
 	/**
@@ -477,7 +506,8 @@ class MigrateTopics extends MigrateBatched {
 	public static function migrate ( $config ) {
 		self::$target_table = $config->temp_topics;
 		self::$post_type = 'topic';
-		parent::migrate( $config );
+
+		return parent::migrate( $config );
 	}
 
 	/**
@@ -495,8 +525,8 @@ class MigrateTopics extends MigrateBatched {
 			$post_title = (string) addslashes( $this_topic->TOPIC_TITLE );
 			$post_name = (string) sanitize_title( $post_title ); // Must be unique, we'll tack on post id later, when it's known
 			$post_content = (string) addslashes( $this_topic->POST );
-			$post_author = (int) $wpdb->get_var( "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key='IKON_MEMBER_ID_{$this_topic->AUTHOR}'" );
-			$post_parent = (int) $wpdb->get_var( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key='IKON_FORUM_ID_{$this_topic->FORUM_ID}'" );
+			$post_author = (int) $wpdb->get_var( "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key='IKON_MEMBER_ID_{$this_topic->AUTHOR}' LIMIT 1" );
+			$post_parent = (int) $wpdb->get_var( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key='IKON_FORUM_ID_{$this_topic->FORUM_ID}' LIMIT 1" );
 
 			// Just doing it this way because it's easier to maintain the key/value list. The keys are only copied once.
 			$post_data = array(
@@ -564,7 +594,8 @@ class MigrateReplies extends MigrateBatched {
 	public static function migrate ( $config ) {
 		self::$target_table = $config->temp_replies;
 		self::$post_type = 'reply';
-		parent::migrate( $config );
+
+		return parent::migrate( $config );
 	}
 
 	/**
@@ -623,8 +654,8 @@ class MigrateReplies extends MigrateBatched {
 		foreach ( $replies as $this_reply ) {
 			$ikon_post_id = (string) addslashes( $this_reply->POST_ID );
 			$author_ip = (string) addslashes( $this_reply->IP_ADDR );
-			$bbp_topic_id = (int) $wpdb->get_var( "SELECT post_parent FROM $wpdb->posts WHERE ID = $post_id" );
-			$bbp_forum_id = (int) $wpdb->get_var( "SELECT post_parent FROM $wpdb->posts WHERE ID = $bbp_topic_id" );
+			$bbp_topic_id = (int) $wpdb->get_var( "SELECT post_parent FROM $wpdb->posts WHERE ID = $post_id LIMIT 1" );
+			$bbp_forum_id = (int) $wpdb->get_var( "SELECT post_parent FROM $wpdb->posts WHERE ID = $bbp_topic_id LIMIT 1" );
 
 			$values .= "($post_id, 'IKON_POST_ID_$ikon_post_id', '$ikon_post_id'),";
 			$values .= "($post_id, '_bbp_forum_id', '$bbp_forum_id'),";

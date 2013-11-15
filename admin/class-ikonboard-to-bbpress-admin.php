@@ -651,16 +651,16 @@ class IkonboardToBBPress_Admin {
 			return '1';
 		}
 
-		$last_page = max( 1, (int) $progress );
-
 		$config = new MigrateConfig( $this->table_prefix, array(), $this );
 
 		/*$config->limit = 10000;
-		$config->page = 1;*/
+		$config->page = 1;
+
+		$last_page = max( 1, (int) $progress );
 
 		if ( 1 < $last_page ) {
 			$config->page = $last_page;
-		}
+		}*/
 
 		$total_found = $this->prepare_users( $params );
 
@@ -669,22 +669,22 @@ class IkonboardToBBPress_Admin {
 			$this->update_progress_meta( 'total', __FUNCTION__, $total_found, $params->object );
 		}
 
-		$this->update_progress_meta( 'left', __FUNCTION__, ( $total_found - ( $config->limit * $config->page ) ), $params->object );
+		$this->update_progress_meta( 'left', __FUNCTION__, $total_found, $params->object );
 		//$this->update_progress_meta( 'left', __FUNCTION__, ( $total_found - ( $config->limit * $config->page ) ), $params->object );
 
 		$added_rows = MigrateUsers::migrate( $config );
 
 		// All done!
-		if ( $added_rows < $config->limit || 0 == $added_rows ) {
+		//if ( $added_rows < $config->limit || 0 == $added_rows ) {
 			$this->update_progress( __FUNCTION__, true, $params->object );
 
 			return '1';
-		}
+		//}
 
 		// To be continued...
-		$this->update_progress( __FUNCTION__, ( $last_page + 1 ), $params->object );
+		//$this->update_progress( __FUNCTION__, ( $last_page + 1 ), $params->object );
 
-		return '-2';
+		//return '-2';
 
 	}
 
