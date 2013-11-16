@@ -460,6 +460,8 @@ abstract class MigrateBatched {
 					LEFT JOIN `{$wpdb->postmeta}` AS `pm` ON `pm`.`meta_key` = {$concat}
 					WHERE `pm`.`meta_value` IS NULL
 				";
+
+				$start = 0; // No start, it's always going to get the next one in line
 			}
 
 			$results = $wpdb->get_results( "
