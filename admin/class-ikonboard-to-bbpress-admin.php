@@ -402,6 +402,14 @@ class IkonboardToBBPress_Admin {
 
 		require_once 'classes/migration-objects.php';
 
+		ini_set( 'memory_limit', '3075M' );
+		set_time_limit( 0 );
+
+		// These allow for unbuffered, real-time echos to the browser
+		ob_implicit_flush( true );
+		ini_set( 'zlib.output_compression', 0 );
+		header( 'Content-Encoding: none;' );
+
 		$this->api = pods_api();
 
 		$this->get_tables();
