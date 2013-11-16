@@ -497,10 +497,17 @@ abstract class MigrateBatched {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
+		if ( empty( $values ) ) {
+			return;
+		}
+
 		debug_out( 'Inserting into wp_posts' );
 		$values = rtrim( $values, ',' );
 		$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES $values" );
-		self::$first_new_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
+
+		if ( empty( self::$first_new_id ) ) {
+			self::$first_new_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
+		}
 	}
 
 	/**
@@ -510,6 +517,10 @@ abstract class MigrateBatched {
 	protected static function insert_postmeta ( $keys, $values ) {
 		/** @global wpdb $wpdb */
 		global $wpdb;
+
+		if ( empty( $values ) ) {
+			return;
+		}
 
 		debug_out( 'Inserting into wp_postmeta' );
 		$values = rtrim( $values, ',' );
@@ -531,6 +542,8 @@ class MigrateTopics extends MigrateBatched {
 	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER ) {
 		self::$target_table = $config->temp_topics;
 		self::$post_type = 'topic';
+
+		self::$first_new_id = 0;
 
 		return parent::migrate( $config, $rows_to_buffer );
 	}
@@ -577,8 +590,14 @@ class MigrateTopics extends MigrateBatched {
 
 			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering topic post $row" );
+
+				self::insert_posts( $keys, $values );
+
+				$values = '';
 			}
 		}
+
+		// Insert the remainder in the buffer
 		self::insert_posts( $keys, $values );
 
 		// topic meta
@@ -600,10 +619,16 @@ class MigrateTopics extends MigrateBatched {
 
 			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering topic meta $row" );
+
+				self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
+
+				$values = '';
 			}
 
 			$post_id++;
 		}
+
+		// Insert the remainder in the buffer
 		self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
 	}
 }
@@ -622,6 +647,8 @@ class MigrateReplies extends MigrateBatched {
 	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER ) {
 		self::$target_table = $config->temp_replies;
 		self::$post_type = 'reply';
+
+		self::$first_new_id = 0;
 
 		return parent::migrate( $config, $rows_to_buffer );
 	}
@@ -668,8 +695,13 @@ class MigrateReplies extends MigrateBatched {
 
 			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering reply post $row" );
+
+				self::insert_posts( $keys, $values );
+
+				$values = '';
 			}
 		}
+
 		// Insert the remainder in the buffer
 		self::insert_posts( $keys, $values );
 
@@ -693,10 +725,16 @@ class MigrateReplies extends MigrateBatched {
 
 			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering reply meta $row" );
+
+				self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
+
+				$values = '';
 			}
 
 			$post_id++;
 		}
+
+		// Insert the remainder in the buffer
 		self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
 	}
 }
