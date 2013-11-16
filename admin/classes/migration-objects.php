@@ -319,7 +319,7 @@ class MigrateForums {
 	 *
 	 * @return null|string New post ID
 	 */
-	private static function create_post ( $post_data ) {
+	protected static function create_post ( $post_data ) {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
