@@ -277,31 +277,6 @@ class MigrateForums {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
-		// Ikonboard categories become top-level forums (no parent)
-		$categories = $wpdb->get_results( "
-			SELECT
-				`CAT_ID`, `CAT_NAME`, `CAT_POS`
-			FROM
-				`{$config->categories}`
-		" );
-		foreach ( $categories as $this_cat ) {
-			$post_title = addslashes( $this_cat->CAT_NAME );
-			$post_name = sanitize_title( $post_title );
-			$menu_order = addslashes( $this_cat->CAT_POS );
-
-			$post_data = array(
-				'post_title' => "'$post_title'",
-				'post_name'  => "'$post_name'",
-				'menu_order' => $menu_order,
-				'post_type'  => "'forum'"
-			);
-			$post_id = self::create_post( $post_data );
-
-			// Save Ikonboard category ID as meta
-			$ikon_cat_id = addslashes( $this_cat->CAT_ID );
-			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_CAT_ID_$ikon_cat_id', '$ikon_cat_id')" );
-		}
-
 		// Ikonboard Forums
 		$forums = $wpdb->get_results( "
 			SELECT
@@ -369,6 +344,50 @@ class MigrateForums {
 
 		$wpdb->query( "INSERT INTO `{$wpdb->posts}` ($keys) VALUES ($values)" );
 		return $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
+	}
+}
+
+/**
+ * Class MigrateForumCategories
+ */
+class MigrateForumCategories extends MigrateForums {
+
+	/**
+	 * @param MigrateConfig $config
+	 */
+	public static function migrate ( $config ) {
+		/** @global wpdb $wpdb */
+		global $wpdb;
+
+		// Ikonboard categories become top-level forums (no parent)
+		$categories = $wpdb->get_results( "
+			SELECT
+				`CAT_ID`, `CAT_NAME`, `CAT_POS`
+			FROM
+				`{$config->categories}`
+		" );
+		foreach ( $categories as $this_cat ) {
+			$post_title = addslashes( $this_cat->CAT_NAME );
+			$post_name = sanitize_title( $post_title );
+			$menu_order = addslashes( $this_cat->CAT_POS );
+
+			$post_data = array(
+				'post_title' => "'$post_title'",
+				'post_name'  => "'$post_name'",
+				'menu_order' => $menu_order,
+				'post_type'  => "'forum'"
+			);
+			$post_id = parent::create_post( $post_data );
+
+			// Save Ikonboard category ID as meta
+			$ikon_cat_id = addslashes( $this_cat->CAT_ID );
+			$wpdb->query( "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES ($post_id, 'IKON_CAT_ID_$ikon_cat_id', '$ikon_cat_id')" );
+		}
+
+		// Set all the guids
+		$site_url = get_site_url();
+		$params = '/?post_type=forum&#038;p=';
+		$wpdb->query( "UPDATE `{$wpdb->posts}` SET `guid` = CONCAT('$site_url', '$params', `ID`) WHERE `guid` = '' AND `post_type` = 'forum'" );
 	}
 }
 

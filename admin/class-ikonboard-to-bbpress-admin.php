@@ -405,6 +405,7 @@ class IkonboardToBBPress_Admin {
 		$this->api = pods_api();
 
 		$this->get_tables();
+		$this->get_progress();
 
 		// Stop notifications / etc in certain plugins
 		define( 'WP_IMPORTING', true );
@@ -731,7 +732,14 @@ class IkonboardToBBPress_Admin {
 
 		$this->update_progress_meta( 'left', __FUNCTION__, $total_found, $params->object );
 
-		$added_rows = MigrateForums::migrate( $config );
+		$added_rows = 0;
+
+		if ( 'forum_parents' == $params->object ) {
+			$added_rows = MigrateForumCategories::migrate( $config );
+		}
+		else {
+			$added_rows = MigrateForums::migrate( $config );
+		}
 
 		// All done!
 		//if ( $added_rows < $migration_limit || 0 == $added_rows ) {
