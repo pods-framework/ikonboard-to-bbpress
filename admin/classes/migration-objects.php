@@ -431,8 +431,11 @@ abstract class MigrateBatched {
 
 	/**
 	 * @param MigrateConfig $config
+	 * @param int $rows_to_buffer
+	 *
+	 * @return int
 	 */
-	public static function migrate ( $config ) {
+	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER ) {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
@@ -440,7 +443,7 @@ abstract class MigrateBatched {
 
 		do {
 			$start = self::$current_start_row;
-			$rows = self::ROWS_TO_BUFFER;
+			$rows = $rows_to_buffer;
 
 			debug_out( sprintf( "Selecting rows %d to %d...", $start + 1, $start + $rows ) );
 
@@ -467,10 +470,10 @@ abstract class MigrateBatched {
 			" );
 
 			self::$row_count += count( $results );
-			self::$current_start_row += self::ROWS_TO_BUFFER;
+			self::$current_start_row += $rows_to_buffer;
 			static::process_batch( $results );
 		}
-		while ( count( $results ) == self::ROWS_TO_BUFFER );
+		while ( count( $results ) == $rows_to_buffer );
 
 		// Ensure unique page_name
 		debug_out( 'Updating post slugs...' );
@@ -521,12 +524,15 @@ class MigrateTopics extends MigrateBatched {
 
 	/**
 	 * @param MigrateConfig $config
+	 * @param int $rows_to_buffer
+	 *
+	 * @return int
 	 */
-	public static function migrate ( $config ) {
+	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER ) {
 		self::$target_table = $config->temp_topics;
 		self::$post_type = 'topic';
 
-		return parent::migrate( $config );
+		return parent::migrate( $config, $rows_to_buffer );
 	}
 
 	/**
@@ -609,12 +615,15 @@ class MigrateReplies extends MigrateBatched {
 
 	/**
 	 * @param MigrateConfig $config
+	 * @param int $rows_to_buffer
+	 *
+	 * @return int
 	 */
-	public static function migrate ( $config ) {
+	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER ) {
 		self::$target_table = $config->temp_replies;
 		self::$post_type = 'reply';
 
-		return parent::migrate( $config );
+		return parent::migrate( $config, $rows_to_buffer );
 	}
 
 	/**
