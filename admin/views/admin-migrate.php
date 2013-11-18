@@ -14,6 +14,9 @@
 	MigrateUsers::migrate( $config );
 	time_elapsed( 'Migrate users completed' );
 
+	MigrateForumCategories::migrate( $config );
+	time_elapsed( 'Migrate forum categories completed' );
+
 	MigrateForums::migrate( $config );
 	time_elapsed( 'Migrate forums completed' );
 
