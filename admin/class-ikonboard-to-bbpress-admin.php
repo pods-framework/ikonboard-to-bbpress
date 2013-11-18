@@ -343,6 +343,15 @@ class IkonboardToBBPress_Admin {
 
 		$wizard_migrate_rows = $wizard_rows;
 
+		// Add extra bbPress cleanup tasks
+		$repair_list = bbp_admin_repair_list();
+
+		$wizard_migrate_rows[ 'bbpress_tools' ] = array();
+
+		foreach ( $repair_list as $repair ) {
+			$wizard_migrate_rows[ 'bbpress_tools' ][ $repair[ 2 ] ] = $repair[ 1 ];
+		}
+
 		include_once 'views/wizard.php';
 
 	}
@@ -850,6 +859,20 @@ class IkonboardToBBPress_Admin {
 
 		// To be continued...
 		//return '-2';
+
+	}
+
+	public function migrate_bbpress_tools( $params ) {
+
+		if ( !isset( $params->object ) ) {
+			return pods_error( __( 'Invalid Object.', 'pods' ) );
+		}
+
+		if ( is_callable( $params->object ) ) {
+			call_user_func( $params->object );
+		}
+
+		return '1';
 
 	}
 
