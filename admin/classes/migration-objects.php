@@ -182,7 +182,7 @@ class MigrateUsers {
 
 		$members = $wpdb->get_results( "
 			SELECT DISTINCT
-				`p`.`MEMBER_ID`, `p`.`MEMBER_NAME`, `p`.`MEMBER_EMAIL`, `p`.`MEMBER_JOINED`
+				`p`.`MEMBER_ID`, `p`.`MEMBER_NAME`, `p`.`MEMBER_EMAIL`, `p`.`MEMBER_JOINED`, `p`.`MEMBER_PASSWORD`
 			FROM
 				`{$config->member_profiles}` AS `p`
 			LEFT JOIN
@@ -449,7 +449,7 @@ abstract class MigrateBatched {
 
 			$joinwhere = '';
 
-			if ( in_array( self::$post_type, array( 'topic', 'reply' ) ) ) {
+			if ( 1 == 0 && in_array( self::$post_type, array( 'topic', 'reply' ) ) ) {
 				$concat = "CONCAT( 'IKON_POST_ID_', `t`.`POST_ID` )";
 
 				if ( 'topic' == self::$post_type ) {
@@ -464,18 +464,27 @@ abstract class MigrateBatched {
 				$start = 0; // No start, it's always going to get the next one in line
 			}
 
+			$limit = "{$start}, {$rows}";
+
+			if ( empty( $start ) ) {
+				$limit = $rows;
+			}
+
 			$results = $wpdb->get_results( "
 				SELECT DISTINCT `t`.*
 				FROM `{$table}` AS `t`
 				{$joinwhere}
-				LIMIT {$start}, {$rows}
+				LIMIT {$limit}
 			" );
 
 			self::$row_count += count( $results );
 			self::$current_start_row += $rows_to_buffer;
+
+			debug_out( sprintf( "Found %d rows", count( $results ) ) );
+
 			static::process_batch( $results );
 		}
-		while ( count( $results ) == $rows_to_buffer );
+		while ( 0 < count( $results ) );
 
 		// Ensure unique page_name
 		debug_out( 'Updating post slugs...' );
