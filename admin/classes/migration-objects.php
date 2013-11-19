@@ -460,7 +460,7 @@ abstract class MigrateBatched {
 
 			static::process_batch( $results );
 		}
-		while ( 0 < count( $results ) );
+		while ( $rows_to_buffer == count( $results ) );
 
 		// Ensure unique page_name
 		debug_out( 'Updating post slugs...' );
