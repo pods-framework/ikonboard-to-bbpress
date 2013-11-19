@@ -396,7 +396,7 @@ class MigrateForumCategories extends MigrateForums {
  */
 abstract class MigrateBatched {
 
-	const ROWS_TO_BUFFER = 50000;
+	const ROWS_TO_BUFFER = 10000;
 
 	/**
 	 * @var string
@@ -447,34 +447,10 @@ abstract class MigrateBatched {
 
 			debug_out( sprintf( "Selecting rows %d to %d...", $start + 1, $start + $rows ) );
 
-			$joinwhere = '';
-
-			if ( 1 == 0 && in_array( self::$post_type, array( 'topic', 'reply' ) ) ) {
-				$concat = "CONCAT( 'IKON_POST_ID_', `t`.`POST_ID` )";
-
-				if ( 'topic' == self::$post_type ) {
-					$concat = "CONCAT( 'IKON_TOPIC_ID_', `t`.`TOPIC_ID` )";
-				}
-
-				$joinwhere = "
-					LEFT JOIN `{$wpdb->postmeta}` AS `pm` ON `pm`.`meta_key` = {$concat}
-					WHERE `pm`.`meta_value` IS NULL
-				";
-
-				$start = 0; // No start, it's always going to get the next one in line
-			}
-
-			$limit = "{$start}, {$rows}";
-
-			if ( empty( $start ) ) {
-				$limit = $rows;
-			}
-
 			$results = $wpdb->get_results( "
 				SELECT DISTINCT `t`.*
 				FROM `{$table}` AS `t`
-				{$joinwhere}
-				LIMIT {$limit}
+				LIMIT {$start}, {$rows}
 			" );
 
 			self::$row_count += count( $results );
@@ -516,9 +492,7 @@ abstract class MigrateBatched {
 		$values = rtrim( $values, ',' );
 		$wpdb->query( "INSERT INTO {$wpdb->posts} ($keys) VALUES $values" );
 
-		if ( empty( self::$first_new_id ) ) {
-			self::$first_new_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
-		}
+		self::$first_new_id = $wpdb->get_var( 'SELECT LAST_INSERT_ID();' );
 	}
 
 	/**
@@ -553,8 +527,6 @@ class MigrateTopics extends MigrateBatched {
 	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER ) {
 		self::$target_table = $config->temp_topics;
 		self::$post_type = 'topic';
-
-		self::$first_new_id = 0;
 
 		return parent::migrate( $config, $rows_to_buffer );
 	}
@@ -599,16 +571,14 @@ class MigrateTopics extends MigrateBatched {
 			$values .= '(' . implode( ', ', $post_data ) . '),';
 			$row++;
 
+			// !! This is here for the debugging output ONLY.  If you need to cut down or raise the number of rows
+			// buffered, either change the ROWS_TO_BUFFER constant or pass the number of rows to migrate()
 			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering topic post $row" );
-
-				self::insert_posts( $keys, $values );
-
-				$values = '';
 			}
 		}
 
-		// Insert the remainder in the buffer
+		// Insert the full buffer into posts
 		self::insert_posts( $keys, $values );
 
 		// topic meta
@@ -628,18 +598,16 @@ class MigrateTopics extends MigrateBatched {
 			$values .= "($post_id, '_bbp_author_ip', '$author_ip'),";
 			$row++;
 
+			// !! This is here for the debugging output ONLY.  If you need to cut down or raise the number of rows
+			// buffered, either change the ROWS_TO_BUFFER constant or pass the number of rows to migrate()
 			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering topic meta $row" );
-
-				self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
-
-				$values = '';
 			}
 
 			$post_id++;
 		}
 
-		// Insert the remainder in the buffer
+		// Insert the full buffer into postmeta
 		self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
 	}
 }
@@ -658,8 +626,6 @@ class MigrateReplies extends MigrateBatched {
 	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER ) {
 		self::$target_table = $config->temp_replies;
 		self::$post_type = 'reply';
-
-		self::$first_new_id = 0;
 
 		return parent::migrate( $config, $rows_to_buffer );
 	}
@@ -704,16 +670,13 @@ class MigrateReplies extends MigrateBatched {
 			$values .= '(' . implode( ', ', $post_data ) . '),';
 			$row++;
 
+			// !! This is here for the debugging output ONLY.  If you need to cut down or raise the number of rows
+			// buffered, either change the ROWS_TO_BUFFER constant or pass the number of rows to migrate()
 			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering reply post $row" );
-
-				self::insert_posts( $keys, $values );
-
-				$values = '';
 			}
 		}
 
-		// Insert the remainder in the buffer
 		self::insert_posts( $keys, $values );
 
 		// reply meta
@@ -734,18 +697,15 @@ class MigrateReplies extends MigrateBatched {
 			$values .= "($post_id, '_bbp_author_ip', '$author_ip'),";
 			$row++;
 
+			// !! This is here for the debugging output ONLY.  If you need to cut down or raise the number of rows
+			// buffered, either change the ROWS_TO_BUFFER constant or pass the number of rows to migrate()
 			if ( 0 == $row % 10000 ) {
 				debug_out( "Buffering reply meta $row" );
-
-				self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
-
-				$values = '';
 			}
 
 			$post_id++;
 		}
 
-		// Insert the remainder in the buffer
 		self::insert_postmeta( 'post_id, meta_key, meta_value', $values );
 	}
 }
