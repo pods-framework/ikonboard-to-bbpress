@@ -443,14 +443,13 @@ abstract class MigrateBatched {
 
 		do {
 			$start = self::$current_start_row;
-			$rows = $rows_to_buffer;
 
-			debug_out( sprintf( "Selecting rows %d to %d...", $start + 1, $start + $rows ) );
+			debug_out( sprintf( "Selecting rows %d to %d...", $start + 1, $start + $rows_to_buffer ) );
 
 			$results = $wpdb->get_results( "
 				SELECT DISTINCT `t`.*
 				FROM `{$table}` AS `t`
-				LIMIT {$start}, {$rows}
+				LIMIT {$start}, {$rows_to_buffer}
 			" );
 
 			self::$row_count += count( $results );
