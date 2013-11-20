@@ -464,8 +464,15 @@ abstract class MigrateBatched {
 			debug_out( sprintf( "Found %d rows", count( $results ) ) );
 
 			static::process_batch( $results );
+
+			if ( null != $max_rows ) {
+				$maxed = false;
+			}
+			else {
+				$maxed = ( self::$row_count >= $max_rows );
+			}
 		}
-		while ( $rows_to_buffer == count( $results ) && ( !empty( $max_rows ) && self::$row_count < $max_rows ) );
+		while ( $rows_to_buffer == count( $results ) && !$maxed );
 
 		// Ensure unique page_name
 		debug_out( 'Updating post slugs...' );
