@@ -432,14 +432,20 @@ abstract class MigrateBatched {
 	/**
 	 * @param MigrateConfig $config
 	 * @param int $rows_to_buffer
+	 * @param null $max_rows
+	 * @param null $start_at
 	 *
 	 * @return int
 	 */
-	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER ) {
+	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER, $max_rows = null, $start_at = null ) {
 		/** @global wpdb $wpdb */
 		global $wpdb;
 
 		$table = self::$target_table;
+
+		if ( null != $start_at ) {
+			self::$current_start_row = $start_at;
+		}
 
 		do {
 			$start = self::$current_start_row;
@@ -459,7 +465,7 @@ abstract class MigrateBatched {
 
 			static::process_batch( $results );
 		}
-		while ( $rows_to_buffer == count( $results ) );
+		while ( $rows_to_buffer == count( $results ) && ( !empty( $max_rows ) && self::$row_count < $max_rows ) );
 
 		// Ensure unique page_name
 		debug_out( 'Updating post slugs...' );
