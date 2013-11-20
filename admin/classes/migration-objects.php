@@ -465,7 +465,7 @@ abstract class MigrateBatched {
 
 			static::process_batch( $results );
 
-			if ( null != $max_rows ) {
+			if ( null == $max_rows ) {
 				$maxed = false;
 			}
 			else {
