@@ -793,26 +793,28 @@ class IkonboardToBBPress_Admin {
 
 		$total_found = $this->prepare_topics( $params );
 
-		//$migration_limit = $this->limit_topics;
-
 		if ( empty( $last_id ) ) {
 			$this->update_progress_meta( 'start', __FUNCTION__, time(), $params->object );
 			$this->update_progress_meta( 'total', __FUNCTION__, $total_found, $params->object );
+			$this->update_progress_meta( 'left', __FUNCTION__, $total_found, $params->object );
 		}
 
-		$this->update_progress_meta( 'left', __FUNCTION__, $total_found, $params->object );
+		$added_rows = MigrateTopics::migrate( $config, MigrateBatched::ROWS_TO_BUFFER, 50000, $progress );
+		$progress += $added_rows;
 
-		$added_rows = MigrateTopics::migrate( $config );
+		$this->update_progress_meta( 'left', __FUNCTION__, $total_found - $added_rows, $params->object );
 
 		// All done!
-		//if ( $added_rows < $migration_limit || 0 == $added_rows ) {
+		if ( $progress < $total_found || 0 == $added_rows ) {
 			$this->update_progress( __FUNCTION__, true, $params->object );
 
 			return '1';
-		//}
+		}
 
 		// To be continued...
-		//return '-2';
+		$this->update_progress( __FUNCTION__, $progress, $params->object );
+
+		return '-2';
 
 	}
 
@@ -839,26 +841,28 @@ class IkonboardToBBPress_Admin {
 
 		$total_found = $this->prepare_replies( $params );
 
-		//$migration_limit = $this->limit_users;
-
 		if ( empty( $last_id ) ) {
 			$this->update_progress_meta( 'start', __FUNCTION__, time(), $params->object );
 			$this->update_progress_meta( 'total', __FUNCTION__, $total_found, $params->object );
+			$this->update_progress_meta( 'left', __FUNCTION__, $total_found, $params->object );
 		}
 
-		$this->update_progress_meta( 'left', __FUNCTION__, $total_found, $params->object );
+		$added_rows = MigrateReplies::migrate( $config, MigrateBatched::ROWS_TO_BUFFER, 200000, $progress );
+		$progress += $added_rows;
 
-		$added_rows = MigrateReplies::migrate( $config );
+		$this->update_progress_meta( 'left', __FUNCTION__, $total_found - $added_rows, $params->object );
 
 		// All done!
-		//if ( $added_rows < $migration_limit || 0 == $added_rows ) {
+		if ( $progress < $total_found || 0 == $added_rows ) {
 			$this->update_progress( __FUNCTION__, true, $params->object );
 
 			return '1';
-		//}
+		}
 
 		// To be continued...
-		//return '-2';
+		$this->update_progress( __FUNCTION__, $progress, $params->object );
+
+		return '-2';
 
 	}
 
