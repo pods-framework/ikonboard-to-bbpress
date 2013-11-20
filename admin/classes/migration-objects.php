@@ -533,14 +533,16 @@ class MigrateTopics extends MigrateBatched {
 	/**
 	 * @param MigrateConfig $config
 	 * @param int $rows_to_buffer
+	 * @param null $max_rows
+	 * @param null $start_at
 	 *
 	 * @return int
 	 */
-	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER ) {
+	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER, $max_rows = null, $start_at = null ) {
 		self::$target_table = $config->temp_topics;
 		self::$post_type = 'topic';
 
-		return parent::migrate( $config, $rows_to_buffer );
+		return parent::migrate( $config, $rows_to_buffer, $max_rows, $start_at );
 	}
 
 	/**
@@ -632,14 +634,16 @@ class MigrateReplies extends MigrateBatched {
 	/**
 	 * @param MigrateConfig $config
 	 * @param int $rows_to_buffer
+	 * @param null $max_rows
+	 * @param null $start_at
 	 *
 	 * @return int
 	 */
-	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER ) {
+	public static function migrate ( $config, $rows_to_buffer = self::ROWS_TO_BUFFER, $max_rows = null, $start_at = null ) {
 		self::$target_table = $config->temp_replies;
 		self::$post_type = 'reply';
 
-		return parent::migrate( $config, $rows_to_buffer );
+		return parent::migrate( $config, $rows_to_buffer, $max_rows, $start_at );
 	}
 
 	/**
